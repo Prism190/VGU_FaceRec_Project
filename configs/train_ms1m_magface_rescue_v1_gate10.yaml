@@ -1,0 +1,106 @@
+experiment:
+  name: mobilenetv4_magface_kd_ms1m_rescue_v1_gate10
+  output_root: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/runs/ms1m_magface_rescue_v1_gate10
+  seed: 3407
+
+system:
+  use_amp: true
+  use_dali: true
+  dali_aug: true
+  dali_num_threads: 2
+  dali_prefetch_queue_depth: 1
+  dali_initial_fill: 32768
+  dali_random_shuffle: true
+  num_workers: 16
+  use_dataloaderx: true
+  recordio_num_workers: 8
+  recordio_decode_retries: 64
+  pin_memory: true
+  cudnn_benchmark: true
+
+distributed:
+  enabled: true
+
+data:
+  image_size: 112
+  mean: [0.5, 0.5, 0.5]
+  std: [0.5, 0.5, 0.5]
+  hflip_prob: 0.5
+  mask_prob: 0.15
+  mask_fill: zero
+  use_clahe: false
+  # Swap this to your MS1M manifest after loader is finalized.
+  train_manifest: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/manifests/ms1m_clean_train.csv
+  val_sets:
+    - name: lfw
+      pairs_csv: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/manifests/lfw_pairs.csv
+    - name: cfp_fp
+      pairs_csv: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/manifests/cfp_fp_pairs.csv
+    - name: agedb30
+      pairs_csv: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/manifests/agedb30_pairs.csv
+  ijb:
+    protocol_csv: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/manifests/ijb_1to1_pairs.csv
+    ijbb_root: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/raw/ijb/ijb/IJBB
+    ijbc_root: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/raw/ijb/ijb/IJBC
+
+teacher:
+  source: magface
+  arch: iresnet100
+  model_name: ""
+  checkpoint: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/checkpoints/pretrained/magface_iresnet100_ms1mv2.pth
+  embedding_dim: 512
+  input_mode: from_minus_one_to_zero_one
+  swap_rb: false
+
+student:
+  backbone_name: mobilenetv4_conv_small.e2400_r224_in1k
+  pretrained: false
+  embedding_dim: 512
+  projection_activation: none
+
+margin_head:
+  type: magface
+  scale: 64.0
+  margin: 0.35
+  magface_margin_min: 0.30
+  magface_margin_max: 0.50
+  feature_norm_lower: 10.0
+  feature_norm_upper: 110.0
+  regularizer_lambda: 35.0
+
+loss:
+  lambda_cls: 1.0
+  lambda_kd_start: 0.5
+  lambda_kd_end: 2.0
+  kd_ramp_epochs: 10
+  lambda_rkd_distance: 0.0
+  lambda_rkd_angle: 1.0
+
+optim:
+  lr: 0.03
+  momentum: 0.9
+  nesterov: false
+  weight_decay: 0.0001
+  grad_clip_norm: 3.0
+
+scheduler:
+  # Short rescue gate schedule from warm-started MagFace weights.
+  milestones: [5, 8]
+  gamma: 0.1
+  warmup_epochs: 1
+  warmup_start_factor: 0.1
+
+train:
+  epochs: 10
+  batch_size_per_gpu: 256
+  auto_resume: false
+  resume_from: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/runs/ms1m_v1/checkpoints/adamw_run_backup/best.pt
+  show_progress_bar: true
+  log_interval: 100
+  save_every: 1
+  eval_every: 1
+  best_metric: mean_tar_far_1e-4
+  early_stop_patience: 3
+
+metrics:
+  target_fars: [0.001, 0.0001, 0.00001]
