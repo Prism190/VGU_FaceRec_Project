@@ -27,6 +27,7 @@ class TrackedFace:
 class FaceObservation:
     track_id: int
     frame_idx: int
+    bbox_xyxy: tuple[float, float, float, float]
     embedding: np.ndarray
     magnitude: float
     liveness_score: float

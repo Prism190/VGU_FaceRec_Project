@@ -39,6 +39,11 @@ def main() -> None:
     parser.add_argument("--config", required=True, help="Path to YAML config")
     parser.add_argument("--checkpoint", required=True, help="Path to student checkpoint")
     parser.add_argument("--dataset", choices=["IJBB", "IJBC"], default="IJBB")
+    parser.add_argument(
+        "--ijb-root",
+        default=None,
+        help="Optional dataset root override (expects IJBB/ or IJBC/ directory).",
+    )
     parser.add_argument("--batch-size", type=int, default=256)
     parser.add_argument("--num-workers", type=int, default=4)
     parser.add_argument("--device", default="cuda")
@@ -76,7 +81,7 @@ def main() -> None:
     transform = build_eval_transform(cfg["data"])
 
     target_fars = cfg.get("metrics", {}).get("target_fars", [1e-3, 1e-4, 1e-5])
-    ijb_root = _resolve_ijb_root(cfg=cfg, dataset_name=args.dataset)
+    ijb_root = Path(args.ijb_root) if args.ijb_root else _resolve_ijb_root(cfg=cfg, dataset_name=args.dataset)
 
     metrics = evaluate_ijb_template_1to1(
         model=model,

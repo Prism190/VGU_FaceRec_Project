@@ -12,12 +12,22 @@ class IncrementalUnknownClusterer:
     min_samples: int = 5
     max_buffer_size: int = 10000
     buffer: list[np.ndarray] = field(default_factory=list)
+    _latest_label: int | None = None
 
     def add(self, embedding: np.ndarray) -> None:
         self.buffer.append(np.asarray(embedding, dtype=np.float32))
         if len(self.buffer) > self.max_buffer_size:
             overflow = len(self.buffer) - self.max_buffer_size
             self.buffer = self.buffer[overflow:]
+
+        # Keep this lightweight for streaming use; final labels come from cluster().
+        self._latest_label = None
+
+    def latest_label(self) -> int | None:
+        return self._latest_label
+
+    def __len__(self) -> int:
+        return len(self.buffer)
 
     def cluster(self) -> np.ndarray:
         if not self.buffer:

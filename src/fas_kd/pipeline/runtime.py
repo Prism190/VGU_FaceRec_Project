@@ -19,8 +19,10 @@ class RuntimePipeline:
     liveness_gate: ThresholdLivenessGate
     quality_gate: MagnitudeQualityGate
     embed_fn: Callable[[np.ndarray], np.ndarray]
+    liveness_interval_frames: int = 0
     track_manager: TrackManager = field(default_factory=TrackManager)
     track_buffers: dict[int, TrackEmbeddingBuffer] = field(default_factory=dict)
+    _liveness_cache: dict[int, tuple[int, bool, float]] = field(default_factory=dict)
 
     def process_frame(
         self,
@@ -29,6 +31,11 @@ class RuntimePipeline:
         frame_idx: int,
     ) -> list[FaceObservation]:
         tracks = self.track_manager.update(detections=detections, frame_idx=frame_idx)
+        live_track_ids = {int(t.track_id) for t in tracks}
+
+        # Keep caches bounded to active tracks to avoid unbounded growth.
+        self.track_buffers = {tid: buf for tid, buf in self.track_buffers.items() if tid in live_track_ids}
+        self._liveness_cache = {tid: st for tid, st in self._liveness_cache.items() if tid in live_track_ids}
 
         observations: list[FaceObservation] = []
         track_by_bbox = {tuple(t.bbox_xyxy): t for t in tracks}
@@ -40,7 +47,14 @@ class RuntimePipeline:
                 continue
 
             face_rgb = self.preprocess(frame_bgr, det.landmarks5)
-            is_live, liveness_score = self.liveness_gate.is_live(face_rgb)
+            interval = max(0, int(self.liveness_interval_frames))
+            cached = self._liveness_cache.get(track.track_id)
+            if interval > 0 and cached is not None and (frame_idx - int(cached[0])) < interval:
+                is_live = bool(cached[1])
+                liveness_score = float(cached[2])
+            else:
+                is_live, liveness_score = self.liveness_gate.is_live(face_rgb)
+                self._liveness_cache[track.track_id] = (int(frame_idx), bool(is_live), float(liveness_score))
 
             emb = self.embed_fn(face_rgb)
             emb = np.asarray(emb, dtype=np.float32)
@@ -49,6 +63,7 @@ class RuntimePipeline:
             obs = FaceObservation(
                 track_id=track.track_id,
                 frame_idx=frame_idx,
+                bbox_xyxy=tuple(float(v) for v in det.bbox_xyxy),
                 embedding=emb,
                 magnitude=magnitude,
                 liveness_score=liveness_score,
