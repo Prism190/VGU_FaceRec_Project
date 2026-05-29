@@ -33,8 +33,7 @@ class RuntimePipeline:
         tracks = self.track_manager.update(detections=detections, frame_idx=frame_idx)
         live_track_ids = {int(t.track_id) for t in tracks}
 
-        # Keep caches bounded to active tracks to avoid unbounded growth.
-        self.track_buffers = {tid: buf for tid, buf in self.track_buffers.items() if tid in live_track_ids}
+        # Liveness cache is only meaningful for currently active tracks.
         self._liveness_cache = {tid: st for tid, st in self._liveness_cache.items() if tid in live_track_ids}
 
         observations: list[FaceObservation] = []

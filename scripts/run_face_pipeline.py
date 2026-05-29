@@ -314,6 +314,23 @@ def main() -> None:
 
     parser.add_argument("--gallery-npz", default="", help="Optional gallery npz with arrays: embeddings, ids")
     parser.add_argument("--match-threshold", type=float, default=0.35)
+    parser.add_argument(
+        "--out-gallery-npz",
+        default="",
+        help="Optional output gallery npz generated from pooled track embeddings",
+    )
+    parser.add_argument(
+        "--gallery-min-track-frames",
+        type=int,
+        default=8,
+        help="Minimum accepted observations per track for enrollment when writing --out-gallery-npz",
+    )
+    parser.add_argument(
+        "--gallery-id-offset",
+        type=int,
+        default=1000,
+        help="Offset added to enrolled identity ids when writing --out-gallery-npz",
+    )
 
     parser.add_argument("--dbscan-eps", type=float, default=0.35, help="Cosine-distance threshold for online unknown clustering")
     parser.add_argument("--dbscan-min-samples", type=int, default=5)
@@ -439,6 +456,14 @@ def main() -> None:
         out_summary = out_jsonl.with_suffix(".summary.json")
     out_summary.parent.mkdir(parents=True, exist_ok=True)
 
+    if args.out_gallery_npz:
+        out_gallery = Path(args.out_gallery_npz)
+        if not out_gallery.is_absolute():
+            out_gallery = (PROJECT_ROOT / out_gallery).resolve()
+        out_gallery.parent.mkdir(parents=True, exist_ok=True)
+    else:
+        out_gallery = None
+
     if args.demo_synthetic:
         stream = _synthetic_stream(max_frames=int(args.max_frames))
     else:
@@ -454,6 +479,7 @@ def main() -> None:
     total_observations = 0
     accepted_observations = 0
     recognized_observations = 0
+    track_accept_counts: dict[int, int] = {}
 
     print(f"[pipeline] config={args.config}")
     print(f"[pipeline] checkpoint={ckpt_path}")
@@ -488,6 +514,7 @@ def main() -> None:
 
                 if obs.is_live and obs.quality_pass:
                     accepted_observations += 1
+                    track_accept_counts[obs.track_id] = track_accept_counts.get(obs.track_id, 0) + 1
                     pooled = pipeline.pooled_track_embedding(obs.track_id)
                     if pooled is not None:
                         hits = index.search(pooled, k=1)
@@ -560,6 +587,33 @@ def main() -> None:
                 continue
             cluster_hist[str(int(label))] = int(count)
 
+    enrolled_identities = 0
+    if out_gallery is not None:
+        min_track_frames = max(1, int(args.gallery_min_track_frames))
+        emb_dim = int(cfg["student"].get("embedding_dim", 512))
+        gallery_embeddings: list[np.ndarray] = []
+        gallery_ids: list[int] = []
+
+        for track_id in sorted(pipeline.track_buffers.keys()):
+            if int(track_accept_counts.get(track_id, 0)) < min_track_frames:
+                continue
+            pooled = pipeline.pooled_track_embedding(track_id)
+            if pooled is None:
+                continue
+            gallery_embeddings.append(np.asarray(pooled, dtype=np.float32))
+            gallery_ids.append(int(args.gallery_id_offset) + int(track_id))
+
+        if gallery_embeddings:
+            emb_arr = np.stack(gallery_embeddings, axis=0).astype(np.float32)
+            id_arr = np.asarray(gallery_ids, dtype=np.int64)
+        else:
+            emb_arr = np.zeros((0, emb_dim), dtype=np.float32)
+            id_arr = np.zeros((0,), dtype=np.int64)
+
+        np.savez(out_gallery, embeddings=emb_arr, ids=id_arr)
+        enrolled_identities = int(id_arr.shape[0])
+        print(f"[pipeline] wrote_gallery={out_gallery} enrolled={enrolled_identities}")
+
     summary = {
         "config": str(Path(args.config).resolve()),
         "checkpoint": str(ckpt_path),
@@ -572,8 +626,10 @@ def main() -> None:
         "recognized_observations": int(recognized_observations),
         "unknown_buffer_size": int(len(clusterer)),
         "unknown_cluster_hist": cluster_hist,
+        "enrolled_identities": int(enrolled_identities),
         "output_jsonl": str(out_jsonl),
         "output_video": str(out_video_path) if out_video_path is not None else None,
+        "output_gallery": str(out_gallery) if out_gallery is not None else None,
     }
     out_summary.write_text(json.dumps(summary, indent=2), encoding="utf-8")
 
