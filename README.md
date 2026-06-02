@@ -18,8 +18,9 @@ See [`docs/pipeline_next_stage.md`](docs/pipeline_next_stage.md) for the full ru
 
 ## Quick start — pipeline demo
 
-The recommended checkpoint is **phase1** (`runs/ms1m_magface_phase1_cplus_aplus_v1`).
-It out-performs phases 2 and 3 on both raw and clean IJB metrics (see clean-vs-raw matrix in `docs/`).
+The recommended checkpoint is **phase3** (`runs/ms1m_magface_phase3_trueasym_swa_v1`).
+It is the best student on all YOLO-cleaned IJB metrics: IJBB TAR@1e-4=0.467, IJBC=0.481.
+Phase ordering: phase3 > phase1 > phase2.
 
 ### 1) Environment
 
@@ -150,10 +151,10 @@ torchrun --standalone --nproc_per_node=2 scripts/ddp_smoke_test.py
 ### 4) Train — recommended phase1 config
 
 ```bash
-CONFIG_PATH=configs/train_ms1m_magface_phase1_cplus_aplus_v1.yaml bash scripts/launch_train.sh
+CONFIG_PATH=configs/train_ms1m_magface_phase3_trueasym_swa_v1.yaml bash scripts/launch_train.sh
 ```
 
-Key settings in phase1 config:
+Key settings in phase3 config:
 - backbone: `mobilenetv4_conv_medium`
 - loss: MagFace classification + MSE cosine KD (ramp 5→8 over 8 epochs)
 - mask-free warmup: first 20 epochs, masking enabled after
@@ -213,11 +214,24 @@ Teacher + all phases clean-vs-raw comparison matrix:
 
 ---
 
-## IJB evaluation: known issues and fixes
+## IJB evaluation: known issues
 
-### Issue 1: Low teacher TAR@FAR=1e-4 on raw IJB images
+### Why TAR@FAR=1e-4 is lower than published MagFace numbers
 
-**Root cause A — image quality**: NIST IJB loose crops are raw bounding-box crops without face alignment. The model expects properly aligned 112×112 faces. Run the YOLO11-based clean pipeline first:
+Published MagFace TAR@1e-4: IJBB 93.4%, IJBC 95.5%.
+Our pipeline teacher on YOLO-cleaned IJB: IJBB 60.2%, IJBC 59.2%.
+
+The gap is **alignment quality**, not a code bug:
+
+- The official MagFace evaluation uses InsightFace RetinaFace for landmark detection and 5-point affine alignment — a larger, more precise model.
+- Our pipeline uses YOLO11n (nano) for both the deployment pipeline and the IJB eval data preparation. The nano model's landmarks are less precise, introducing per-image crop noise.
+- Noisy crops compress the score distributions. Ranking quality (AUC ≈ 0.97–0.98) stays high because relative ordering is preserved, but TAR collapses at strict FAR=1e-4 since the gap between genuine and impostor pairs narrows.
+
+**Relative student-to-teacher ratios are valid** for comparing checkpoints against each other. Phase3 student achieves ~80% of the teacher ceiling on the same evaluation data.
+
+### Image quality: raw vs YOLO-cleaned
+
+NIST IJB loose crops are raw bounding-box crops. Always run the YOLO11 clean pipeline first:
 
 ```bash
 ./venv/bin/python scripts/prepare_ijb_yolo_clean.py \
@@ -226,19 +240,11 @@ Teacher + all phases clean-vs-raw comparison matrix:
   --detector-model checkpoints/pretrained/yolo11n-face-age.pt
 ```
 
-This applies YOLO11 face detection + InsightFace 5-point affine alignment to all loose crops. Images where YOLO11 finds no face are skipped by default (`--no-skip-fallback` to revert), which improves template quality because the evaluator excludes missing images rather than pooling garbage crops.
+Images where YOLO11 finds no face are skipped by default (use `--no-skip-fallback` to include fallback box crops). This improves TAR@1e-4 by ~5–7 points over raw crops.
 
-**Root cause B — teacher input normalisation**: `magface_iresnet100_ms1mv2.pth` was trained with InsightFace-standard preprocessing (images in `[-1, 1]`). The training configs use `teacher.input_mode: from_minus_one_to_zero_one` which converts the eval-transform output from `[-1,1]` back to `[0,1]` before the model — this is incorrect and depresses TAR at low FAR. For standalone teacher evaluation, `generate_ijb_clean_matrix.py` now defaults to `--teacher-input-mode identity`, passing `[-1,1]` directly.
+### Teacher input normalisation
 
-To reproduce the (incorrect) training-time teacher behaviour:
-```bash
-./venv/bin/python scripts/generate_ijb_clean_matrix.py \
-  --teacher-input-mode from_minus_one_to_zero_one ...
-```
-
-### Issue 2: Student checkpoint selection
-
-Existing student checkpoints (phase1/2/3) were trained with the `from_minus_one_to_zero_one` teacher, so their KD targets reflect that regime. For future training, changing `teacher.input_mode: identity` in the config will give the student a better teacher signal.
+`magface_iresnet100_ms1mv2.pth` was trained with images divided by 255 only (`[0, 1]` range — no mean/std normalisation). Our eval transform outputs `[-1, 1]` via `Normalize(0.5, 0.5)`. The `from_minus_one_to_zero_one` input mode in all training configs correctly maps `[-1,1] → [0,1]` before the teacher. Do **not** change this to `identity` — doing so degrades AUC from 0.974 to 0.775 and TAR@1e-4 from 0.602 to 0.012.
 
 ---
 

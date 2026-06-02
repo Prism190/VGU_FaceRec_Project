@@ -55,9 +55,9 @@ def main() -> None:
 
     cfg = load_yaml_config(str(PROJECT_ROOT / "configs" / "train_ms1m_magface_phase3_trueasym_swa_v1.yaml"))
     teacher_cfg = dict(cfg["teacher"])
-    teacher_cfg["input_mode"] = "identity"
+    teacher_cfg["input_mode"] = "from_minus_one_to_zero_one"
 
-    print("Loading teacher (input_mode=identity)...")
+    print("Loading teacher (input_mode=from_minus_one_to_zero_one)...")
     model = build_frozen_teacher(teacher_cfg).to(device)
     transform = build_eval_transform(cfg["data"])
     target_fars = [1e-3, 1e-4, 1e-5]

@@ -145,18 +145,20 @@ def main() -> None:
     parser.add_argument("--template-pooling", default="magface_weighted", choices=["mean", "magface_weighted"])
     parser.add_argument("--raw-root", default="data/raw/ijb/ijb")
     parser.add_argument("--clean-root", default="data/processed/ijb_clean_yolo11")
-    # MagFace iResNet100 was trained with InsightFace standard preprocessing: images in [-1, 1].
-    # The training configs use input_mode=from_minus_one_to_zero_one which converts [-1,1]→[0,1]
-    # before feeding the teacher — this is incorrect for MagFace checkpoints and depresses TAR@low-FAR.
-    # Default here to "identity" so standalone teacher evaluation reflects the model's true capability.
+    # MagFace iResNet100 (magface_iresnet100_ms1mv2.pth) was trained with images divided by 255
+    # only (no mean/std normalisation), giving [0,1] range input.  Our eval transform outputs
+    # [-1,1] via Normalize(0.5, 0.5); from_minus_one_to_zero_one converts that back to [0,1]
+    # which is correct for this checkpoint.  Using "identity" passes [-1,1] directly, which
+    # empirically degrades AUC from 0.974 to 0.775 and TAR@1e-4 from 0.602 to 0.012.
     parser.add_argument(
         "--teacher-input-mode",
-        default="identity",
+        default="from_minus_one_to_zero_one",
         choices=["identity", "from_minus_one_to_zero_one"],
         help=(
             "Input mode for teacher during evaluation. "
-            "Use 'identity' (default) for MagFace/InsightFace checkpoints that expect [-1,1] input. "
-            "Use 'from_minus_one_to_zero_one' to reproduce training-time behaviour (converts [-1,1]→[0,1])."
+            "Use 'from_minus_one_to_zero_one' (default) for the bundled MagFace checkpoint "
+            "which expects [0,1] inputs (eval transform outputs [-1,1]; this converts back). "
+            "Use 'identity' only if loading a checkpoint already trained on [-1,1] inputs."
         ),
     )
     parser.add_argument("--out-dir", default="logs/ijb_clean_matrix")
