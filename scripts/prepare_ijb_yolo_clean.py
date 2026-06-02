@@ -89,6 +89,7 @@ def _clean_one_dataset(
     max_images: int,
     min_meta_score: float,
     jpeg_quality: int,
+    skip_fallback: bool = True,
 ) -> dict[str, int | str]:
     src_dataset = ijb_root / dataset_name
     src_meta = src_dataset / "meta"
@@ -127,6 +128,7 @@ def _clean_one_dataset(
         "yolo_used": 0,
         "meta5pt_used": 0,
         "fallback_used": 0,
+        "fallback_skipped": 0,
         "align_fail": 0,
         "write_fail": 0,
     }
@@ -160,6 +162,13 @@ def _clean_one_dataset(
             if meta is not None and float(meta[1]) >= float(min_meta_score):
                 landmarks5 = meta[0]
                 stats["meta5pt_used"] += 1
+            elif skip_fallback:
+                # No reliable landmarks: skip this image entirely rather than writing
+                # a garbage crop from synthetic box landmarks. The evaluation code
+                # handles missing images by excluding them from template pooling, which
+                # is far better than including a poorly-aligned crop.
+                stats["fallback_skipped"] += 1
+                continue
             else:
                 landmarks5 = _fallback_landmarks_for_image(image_bgr=image_bgr)
                 stats["fallback_used"] += 1
@@ -203,6 +212,18 @@ def main() -> None:
     parser.add_argument("--min-meta-score", type=float, default=0.0)
     parser.add_argument("--max-images", type=int, default=0, help="Process only first N images per dataset for smoke test")
     parser.add_argument("--overwrite", action="store_true")
+    parser.add_argument(
+        "--no-skip-fallback",
+        dest="skip_fallback",
+        action="store_false",
+        default=True,
+        help=(
+            "By default, images where YOLO11 fails and no reliable NIST 5-pt landmark exists are "
+            "SKIPPED (not written to the clean directory). This keeps template quality high because "
+            "the evaluator simply ignores missing images rather than pooling garbage crops. "
+            "Pass --no-skip-fallback to revert to the old behaviour of writing synthetic-landmark crops."
+        ),
+    )
     parser.add_argument("--report-json", default="", help="Optional JSON report path")
     args = parser.parse_args()
 
@@ -240,6 +261,7 @@ def main() -> None:
             max_images=int(args.max_images),
             min_meta_score=float(args.min_meta_score),
             jpeg_quality=int(args.jpeg_quality),
+            skip_fallback=bool(args.skip_fallback),
         )
         all_stats.append(stats)
 

@@ -1,13 +1,27 @@
-# MobileNetV4 KD + Margin-Aware Face Recognition Training
+# AI Face Recognition Pipeline — VGU 2026
 
-This project trains a MobileNetV4 student with:
-- Masked-input distillation from a frozen MagFace/ResNet-100 teacher
-- Margin-aware identity supervision (MagFace by default, ArcFace optional)
-- Native PyTorch DDP with torchrun on 2 GPUs
+End-to-end face recognition pipeline for edge deployment.
 
-All runtime artifacts stay under this project root to avoid interfering with other users.
+**Core components:**
+- MobileNetV4 student distilled from MagFace iResNet-100 teacher via Relational KD
+- YOLO11-face (pretrained, no training needed) for detection + 5-point affine alignment
+- CLAHE local contrast normalisation for uneven lighting
+- MagFace magnitude-based quality gate (filters blurry / extreme-angle frames)
+- BoT-SORT / DeepSORT tracking with cubic-spline tracklet interpolation
+- Magnitude-weighted template pooling
+- FAISS HNSW index for ANN retrieval
+- Incremental DBSCAN for auto-enrollment of new identities
 
-## 1) Setup isolated environment
+See [`docs/pipeline_next_stage.md`](docs/pipeline_next_stage.md) for the full runtime module map.
+
+---
+
+## Quick start — pipeline demo
+
+The recommended checkpoint is **phase1** (`runs/ms1m_magface_phase1_cplus_aplus_v1`).
+It out-performs phases 2 and 3 on both raw and clean IJB metrics (see clean-vs-raw matrix in `docs/`).
+
+### 1) Environment
 
 ```bash
 cd /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4
@@ -15,53 +29,80 @@ bash scripts/bootstrap_venv.sh
 source venv/bin/activate
 ```
 
-Default bootstrap installs GPU wheels:
-- `torch==2.5.1`
-- `torchvision==0.20.1`
-- index `https://download.pytorch.org/whl/cu118`
-
-Optional DALI install during bootstrap:
+Install optional runtime deps (FAISS, Ultralytics for YOLO11):
 
 ```bash
-INSTALL_DALI=1 DALI_PKG=nvidia-dali-cuda120 bash scripts/bootstrap_venv.sh
+venv/bin/python -m pip install ultralytics faiss-cpu
 ```
 
-Override if needed:
-
-```bash
-TORCH_CUDA_TAG=cu121 TORCH_VERSION=2.5.1 TORCHVISION_VERSION=0.20.1 bash scripts/bootstrap_venv.sh
-```
-
-## 2) Prepare manifests
-
-## 2) Download datasets and pretrained weights
-
-Run automated download:
+### 2) Download pretrained weights
 
 ```bash
 bash scripts/download_assets.sh
 ```
 
-What it pulls:
-- CASIA-WebFace (Google Drive)
-- CFP (direct zip)
-- IJB (Google Drive)
-- LFW (Kaggle, requires token)
-- AgeDB-30 bundle (Kaggle, requires token)
-- MagFace teacher checkpoints (Google Drive)
+Downloads `checkpoints/pretrained/`:
+- `magface_iresnet100_ms1mv2.pth` — teacher model
+- `yolo11n-face-age.pt` — face detector (pretrained, no training required)
+- `2.7_80x80_MiniFASNetV2.pth` — anti-spoofing model (MiniFASNetV2)
 
-Kaggle token requirement:
-- Place `kaggle.json` at `~/.kaggle/kaggle.json`
-- Set permissions: `chmod 600 ~/.kaggle/kaggle.json`
+Kaggle token required for LFW / AgeDB-30:
+```bash
+chmod 600 ~/.kaggle/kaggle.json
+```
 
-Downloaded layout:
-- archives: `data/archives`
-- extracted datasets: `data/raw`
-- pretrained weights: `checkpoints/pretrained`
+### 3) Import known identities
 
-## 3) Prepare manifests
+```bash
+./venv/bin/python scripts/import_known_faces.py \
+  --entry "Name=path/or/url/to/photo.jpg" \
+  --config configs/train_ms1m_magface_phase1_cplus_aplus_v1.yaml \
+  --detector-model checkpoints/pretrained/yolo11n-face-age.pt \
+  --face-db-root data/face_db
+```
 
-### 2.1 CASIA-WebFace train manifest
+### 4) Run pipeline on a video
+
+```bash
+./venv/bin/python scripts/run_face_pipeline.py \
+  --config configs/train_ms1m_magface_phase1_cplus_aplus_v1.yaml \
+  --checkpoint latest \
+  --source /path/to/video.mp4 \
+  --detector-model checkpoints/pretrained/yolo11n-face-age.pt \
+  --face-db-root data/face_db \
+  --known-db-use --known-db-refresh-from-photos \
+  --liveness-mode hybrid --live-threshold 0.45 \
+  --out-jsonl logs/pipeline_out.jsonl \
+  --out-summary logs/pipeline_out.summary.json
+```
+
+See [`docs/face_labeling_and_ijb_clean_eval_commands.md`](docs/face_labeling_and_ijb_clean_eval_commands.md) for annotated full-pipeline commands, labeling UI, and auto-register loop.
+
+---
+
+## Training (KD student from scratch)
+
+### 1) Download datasets and pretrained weights
+
+```bash
+bash scripts/download_assets.sh
+```
+
+What it pulls: CASIA-WebFace, CFP, IJB-B/C, LFW, AgeDB-30, MagFace teacher checkpoint.
+
+### 2) Prepare MS1M manifests
+
+If MS1M is available as `.rec/.idx`:
+
+```bash
+venv/bin/python scripts/prepare_recordio_manifest.py \
+  --rec-path /path/to/ms1m/train.rec \
+  --idx-path /path/to/ms1m/train.idx \
+  --output-manifest data/manifests/ms1m_train.csv \
+  --output-id-map data/manifests/ms1m_id_map.csv
+```
+
+For CASIA-WebFace (JPEG tree):
 
 ```bash
 python scripts/prepare_casia_manifest.py \
@@ -70,165 +111,144 @@ python scripts/prepare_casia_manifest.py \
   --output-id-map data/manifests/casia_id_map.csv
 ```
 
-### 2.2 LFW pairs manifest (from pairs.txt)
-
-```bash
-python scripts/prepare_pairs_manifest.py \
-  --format lfw \
-  --protocol /path/to/pairs.txt \
-  --images-root /path/to/lfw-aligned \
-  --output-csv data/manifests/lfw_pairs.csv
-```
-
-### 2.3 CFP / AgeDB / IJB protocol manifests
-
-Use triplet format protocol lines:
-
-```
-relative/or/abs/path_a.jpg relative/or/abs/path_b.jpg 1
-relative/or/abs/path_c.jpg relative/or/abs/path_d.jpg 0
-```
-
-Then convert:
-
-```bash
-python scripts/prepare_pairs_manifest.py \
-  --format triplet \
-  --protocol /path/to/protocol.txt \
-  --images-root /path/to/images-root \
-  --output-csv data/manifests/cfp_fp_pairs.csv
-```
-
-Repeat for AgeDB and IJB 1:1 protocol CSV.
-
-## 4) Configure training
-
-Edit config:
-- `configs/train_base.yaml`
-
-Important fields:
-- `data.train_manifest`
-- `data.val_sets[*].pairs_csv`
-- `data.ijb.protocol_csv`
-- `data.ijb.ijbb_root`
-- `data.ijb.ijbc_root`
-- `teacher.checkpoint`
-- `student.backbone_name`
-
-## 5) DDP smoke test
+### 3) DDP smoke test
 
 ```bash
 torchrun --standalone --nproc_per_node=2 scripts/ddp_smoke_test.py
 ```
 
-## 6) Train on 2 GPUs
+### 4) Train — recommended phase1 config
 
 ```bash
-bash scripts/launch_train.sh
+CONFIG_PATH=configs/train_ms1m_magface_phase1_cplus_aplus_v1.yaml bash scripts/launch_train.sh
 ```
 
-By default, rank 0 shows a live tqdm progress bar in terminal with current loss and LR.
-After a successful training run, `scripts/launch_train.sh` now auto-runs post-train validation and writes artifacts to the run's `logs/` directory:
-- InsightFace `.bin` protocol on `latest.pt` and `best.pt`
-- IJB template 1:1 for IJBB and IJBC on `latest.pt` and `best.pt`
+Key settings in phase1 config:
+- backbone: `mobilenetv4_conv_medium`
+- loss: MagFace classification + MSE cosine KD (ramp 5→8 over 8 epochs)
+- mask-free warmup: first 20 epochs, masking enabled after
+- best checkpoint selection: `mean_tar_far_1e-4` on validation pairs
 
 Control flags:
 
 ```bash
-AUTO_VALIDATE_ON_FINISH=0 bash scripts/launch_train.sh      # disable all post-train eval
-AUTO_VALIDATE_RUN_IJB=0 bash scripts/launch_train.sh        # run bin eval only
+AUTO_VALIDATE_ON_FINISH=0 bash scripts/launch_train.sh      # skip post-train eval
+AUTO_VALIDATE_RUN_IJB=0 bash scripts/launch_train.sh        # bin eval only
 EVAL_BATCH_SIZE=256 EVAL_NUM_WORKERS=8 bash scripts/launch_train.sh
 ```
 
-With overrides:
+With config overrides:
 
 ```bash
 bash scripts/launch_train.sh \
   --override train.epochs=40 \
-  --override train.batch_size_per_gpu=160 \
-  --override loss.lambda_kd_end=0.8
+  --override train.batch_size_per_gpu=256
 ```
 
-Recommended 5-epoch clean baseline retry (no synthetic mask, stronger KD, PReLU projection):
+`configs/train_ms1m_magface_phase1_cplus_aplus_v1.yaml` uses DALI RecordIO by default (`system.use_dali: true`). Install DALI first:
 
 ```bash
-CONFIG_PATH=configs/train_cycle_v3_baseline5.yaml bash scripts/launch_train.sh
+venv/bin/python -m pip install nvidia-dali-cuda120
 ```
 
-Recommended production retry (40 epochs, safe masking 0.15, RKD enabled):
+### 5) Post-train evaluation
+
+Bin protocol (LFW / CFP-FP / AgeDB-30):
 
 ```bash
-CONFIG_PATH=configs/train_cycle_v4_long40_mask015.yaml bash scripts/launch_train.sh
+./venv/bin/python scripts/evaluate_bin_protocol.py \
+  --config configs/train_ms1m_magface_phase1_cplus_aplus_v1.yaml \
+  --student-checkpoint runs/ms1m_magface_phase1_cplus_aplus_v1/checkpoints/latest.pt \
+  --out logs/eval_bin_protocol_latest.json
 ```
 
-MS1M profile (direct RecordIO manifest path, no image conversion):
+IJB template 1:1 (recommended: use YOLO-cleaned images):
 
 ```bash
-CONFIG_PATH=configs/train_ms1m_cycle_v1.yaml bash scripts/launch_train.sh
+./venv/bin/python scripts/evaluate_ijb_template_1to1.py \
+  --config configs/train_ms1m_magface_phase1_cplus_aplus_v1.yaml \
+  --checkpoint runs/ms1m_magface_phase1_cplus_aplus_v1/checkpoints/latest.pt \
+  --dataset IJBC \
+  --template-pooling magface_weighted \
+  --out logs/eval_ijbc_template.json
 ```
 
-`train_ms1m_cycle_v1.yaml` uses InsightFace-style RecordIO with DALI by default (`system.use_dali: true`).
-
-Disable the bar if you prefer plain logs:
+Teacher + all phases clean-vs-raw comparison matrix:
 
 ```bash
-bash scripts/launch_train.sh --override train.show_progress_bar=false
+./venv/bin/python scripts/generate_ijb_clean_matrix.py \
+  --device cuda --batch-size 128 --num-workers 4 \
+  --out-dir logs/ijb_clean_matrix_$(date +%Y%m%d)
 ```
 
-Monitor validation during training and automatically stop once post-train eval artifacts are ready:
+---
+
+## IJB evaluation: known issues and fixes
+
+### Issue 1: Low teacher TAR@FAR=1e-4 on raw IJB images
+
+**Root cause A — image quality**: NIST IJB loose crops are raw bounding-box crops without face alignment. The model expects properly aligned 112×112 faces. Run the YOLO11-based clean pipeline first:
 
 ```bash
-venv/bin/python scripts/monitor_validation.py \
-  --run-dir runs/cycle_v3_baseline5 \
-  --watch \
-  --interval 20 \
-  --until-done
+./venv/bin/python scripts/prepare_ijb_yolo_clean.py \
+  --ijb-root data/raw/ijb/ijb \
+  --output-root data/processed/ijb_clean_yolo11 \
+  --detector-model checkpoints/pretrained/yolo11n-face-age.pt
 ```
 
-See [docs/pipeline_next_stage.md](docs/pipeline_next_stage.md) for the expanded runtime pipeline modules and MS1M migration commands.
+This applies YOLO11 face detection + InsightFace 5-point affine alignment to all loose crops. Images where YOLO11 finds no face are skipped by default (`--no-skip-fallback` to revert), which improves template quality because the evaluator excludes missing images rather than pooling garbage crops.
 
-## 7) Evaluate IJB 1:1
+**Root cause B — teacher input normalisation**: `magface_iresnet100_ms1mv2.pth` was trained with InsightFace-standard preprocessing (images in `[-1, 1]`). The training configs use `teacher.input_mode: from_minus_one_to_zero_one` which converts the eval-transform output from `[-1,1]` back to `[0,1]` before the model — this is incorrect and depresses TAR at low FAR. For standalone teacher evaluation, `generate_ijb_clean_matrix.py` now defaults to `--teacher-input-mode identity`, passing `[-1,1]` directly.
 
-Legacy image-pair evaluation (placeholder CSV based):
-
+To reproduce the (incorrect) training-time teacher behaviour:
 ```bash
-python scripts/evaluate_ijb_1to1.py \
-  --config configs/train_base.yaml \
-  --checkpoint checkpoints/best.pt
+./venv/bin/python scripts/generate_ijb_clean_matrix.py \
+  --teacher-input-mode from_minus_one_to_zero_one ...
 ```
 
-Protocol-correct template-based evaluation (recommended):
+### Issue 2: Student checkpoint selection
 
-```bash
-python scripts/evaluate_ijb_template_1to1.py \
-  --config configs/train_base.yaml \
-  --checkpoint checkpoints/best.pt \
-  --dataset IJBB \
-  --batch-size 256 \
-  --num-workers 4
+Existing student checkpoints (phase1/2/3) were trained with the `from_minus_one_to_zero_one` teacher, so their KD targets reflect that regime. For future training, changing `teacher.input_mode: identity` in the config will give the student a better teacher signal.
+
+---
+
+## Training objective
+
+$$L_{total} = \lambda_{cls} L_{MagFace} + \lambda_{kd} L_{KD} + \lambda_d L_{distance} + \lambda_a L_{angle}$$
+
+- `L_MagFace`: margin-aware angular classification loss
+- `L_KD`: cosine KD loss (ramp `lambda_kd_start` → `lambda_kd_end` over `kd_ramp_epochs`)
+- `L_distance`, `L_angle`: Relational KD (off by default; set `lambda_rkd_distance > 0` to enable)
+
+---
+
+## Output layout
+
+```
+runs/<run_name>/
+  checkpoints/
+    latest.pt                         # last epoch
+    best.pt                           # best mean_tar_far_1e-4
+  logs/
+    train_metrics.jsonl
+    eval_latest_bin_protocol.json
+    eval_latest_ijbb_template.json
+    eval_latest_ijbc_template.json
+data/face_db/
+  known/identities/<id_name>/
+    photos/*.jpg
+    embeddings.npz
+  strangers/sessions/<session_name>/
+    groups/<group_id>/samples/*.jpg
 ```
 
-## Core loss used
+---
 
-The composite objective follows:
+## Docs
 
-\[
-L_{total} = \lambda_{cls} L_{MagFace} + \lambda_{kd} L_{KD} + \lambda_{d} L_{distance} + \lambda_{a} L_{angle}
-\]
-
-Default behavior:
-- `L_MagFace` always on
-- `L_KD` cosine loss with KD ramp from `lambda_kd_start` to `lambda_kd_end`
-- RKD distance/angle off by default (set >0 to enable)
-
-## Outputs
-
-- Training logs: `logs/train_metrics.jsonl`
-- Latest checkpoint: `checkpoints/latest.pt`
-- Best checkpoint: `checkpoints/best.pt`
-- Post-train bin eval: `logs/eval_latest_bin_protocol.json`, `logs/eval_best_bin_protocol.json`
-- Post-train IJB template eval: `logs/eval_latest_ijbb_template.json`, `logs/eval_latest_ijbc_template.json`, `logs/eval_best_ijbb_template.json`, `logs/eval_best_ijbc_template.json`
-
-## Phase 2 note
-
-Face anti-spoofing test-time domain generalization is intentionally separated as Phase 2 integration.
+| File | Contents |
+|------|----------|
+| [`docs/pipeline_next_stage.md`](docs/pipeline_next_stage.md) | Runtime pipeline module map, MS1M migration |
+| [`docs/face_labeling_and_ijb_clean_eval_commands.md`](docs/face_labeling_and_ijb_clean_eval_commands.md) | Pipeline run commands, labeling UI, IJB evaluation |
+| [`docs/pipeline_metrics_and_benchmarks.md`](docs/pipeline_metrics_and_benchmarks.md) | Evaluation metric commands and interpretation |
+| [`docs/ms1m_magface_full_v1_40e_postmortem_2026-05-16.md`](docs/ms1m_magface_full_v1_40e_postmortem_2026-05-16.md) | Training run analysis and pivot options |

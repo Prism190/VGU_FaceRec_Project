@@ -17,9 +17,18 @@ work/*
 !work/.gitkeep
 
 # Data and secrets
-data/raw/
-data/processed/
+data/**
+!data/.gitkeep
+!data/**/.gitkeep
 .env
+
+# Local caches and experiment outputs
+.cache/
+.hf_home/
+.home/
+hf_safe_cache/
+backups/
+runs/
 
 # Model artifacts
 *.pt
