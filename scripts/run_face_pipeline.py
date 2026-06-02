@@ -958,7 +958,7 @@ def main() -> None:
     parser.add_argument("--quality-max", type=float, default=None, help="Maximum embedding norm. Default from config margin_head.feature_norm_upper")
     parser.add_argument(
         "--liveness-mode",
-        choices=["always_live", "texture", "hybrid", "silent_face"],
+        choices=["always_live", "texture", "hybrid", "silent_face", "litmas"],
         default="always_live",
     )
     parser.add_argument("--live-threshold", type=float, default=0.5)
@@ -987,7 +987,33 @@ def main() -> None:
         default="bgr",
         help="Expected color order for Silent-Face model input",
     )
-    parser.add_argument("--tracker-backend", choices=["deepsort", "hungarian"], default="deepsort")
+    # LitMAS anti-spoofing options
+    parser.add_argument(
+        "--liveness-litmas-model",
+        default="checkpoints/pretrained/litmas_80x80.pt",
+        help="Path to LitMAS TorchScript checkpoint (used when --liveness-mode litmas)",
+    )
+    parser.add_argument(
+        "--liveness-litmas-device",
+        choices=["auto", "cpu", "cuda"],
+        default="auto",
+        help="Inference device for LitMAS model",
+    )
+    parser.add_argument(
+        "--liveness-litmas-live-class-index",
+        type=int,
+        default=1,
+        help="Softmax class index for 'live' in LitMAS output",
+    )
+    parser.add_argument(
+        "--liveness-litmas-input-size",
+        type=int,
+        nargs=2,
+        default=[80, 80],
+        metavar=("H", "W"),
+        help="Input HxW expected by the LitMAS model",
+    )
+    parser.add_argument("--tracker-backend", choices=["deepsort", "botsort", "hungarian"], default="botsort")
     parser.add_argument(
         "--track-max-missed-frames",
         type=int,
@@ -1014,6 +1040,22 @@ def main() -> None:
         action="store_true",
         help="DeepSORT Kalman gating uses only center position (less strict shape gating)",
     )
+    # BoT-SORT options (used when --tracker-backend botsort)
+    parser.add_argument(
+        "--botsort-device",
+        default="cpu",
+        help="Device for BoT-SORT Kalman tracker (cpu recommended; set to cuda when using ReID)",
+    )
+    parser.add_argument(
+        "--botsort-reid-weights",
+        default=None,
+        help="Optional path to ReID weights for BoT-SORT appearance features (e.g. osnet_x0_25_msmt17.pt)",
+    )
+    parser.add_argument("--botsort-with-reid", action="store_true", help="Enable ReID features in BoT-SORT")
+    parser.add_argument("--botsort-track-high-thresh", type=float, default=0.5)
+    parser.add_argument("--botsort-track-low-thresh", type=float, default=0.1)
+    parser.add_argument("--botsort-new-track-thresh", type=float, default=0.6)
+    parser.add_argument("--botsort-match-thresh", type=float, default=0.8)
 
     parser.add_argument(
         "--face-db-root",
@@ -1288,7 +1330,7 @@ def main() -> None:
         liveness_infer = _infer_liveness_texture
     elif args.liveness_mode == "hybrid":
         liveness_infer = _infer_liveness_hybrid
-    else:
+    elif args.liveness_mode == "silent_face":
         silent_face_model_path = Path(args.liveness_silent_face_model)
         if not silent_face_model_path.is_absolute():
             silent_face_model_path = (PROJECT_ROOT / silent_face_model_path).resolve()
@@ -1313,6 +1355,28 @@ def main() -> None:
         )
         liveness_infer = silent_face.score
         silent_face_device_used = str(silent_face_device)
+    else:  # litmas
+        from fas_kd.pipeline.anti_spoof import LitMASAntiSpoof
+
+        litmas_model_path = Path(args.liveness_litmas_model)
+        if not litmas_model_path.is_absolute():
+            litmas_model_path = (PROJECT_ROOT / litmas_model_path).resolve()
+
+        requested_litmas_device = str(args.liveness_litmas_device).strip().lower()
+        if requested_litmas_device == "auto":
+            litmas_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        elif requested_litmas_device == "cuda":
+            litmas_device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+        else:
+            litmas_device = torch.device("cpu")
+
+        litmas = LitMASAntiSpoof(
+            model_path=litmas_model_path,
+            device=litmas_device,
+            live_class_index=int(args.liveness_litmas_live_class_index),
+            input_size=tuple(int(x) for x in args.liveness_litmas_input_size),
+        )
+        liveness_infer = litmas.score
 
     tracker_backend = str(args.tracker_backend).strip().lower()
 
@@ -1338,6 +1402,13 @@ def main() -> None:
             deepsort_nn_budget=None if int(args.track_nn_budget) <= 0 else int(args.track_nn_budget),
             deepsort_nms_max_overlap=float(args.track_nms_max_overlap),
             deepsort_gating_only_position=bool(args.track_gating_only_position),
+            botsort_device=str(args.botsort_device),
+            botsort_model_weights=args.botsort_reid_weights,
+            botsort_with_reid=bool(args.botsort_with_reid),
+            botsort_track_high_thresh=float(args.botsort_track_high_thresh),
+            botsort_track_low_thresh=float(args.botsort_track_low_thresh),
+            botsort_new_track_thresh=float(args.botsort_new_track_thresh),
+            botsort_match_thresh=float(args.botsort_match_thresh),
         ),
     )
 

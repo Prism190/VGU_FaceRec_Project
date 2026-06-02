@@ -470,3 +470,75 @@ class SilentFaceAntiSpoof:
 
     def __call__(self, face_rgb: np.ndarray) -> float:
         return self.score(face_rgb)
+
+
+class LitMASAntiSpoof:
+    """Inference wrapper for LitMAS (Lightweight Model for Mobile Anti-Spoofing, 2025).
+
+    LitMAS uses an Efficient-Hybrid architecture optimised for edge deployment.
+    This class loads the model from a TorchScript (.pt/.ts) file or a plain
+    state-dict checkpoint, and exposes the same ``score()`` interface as
+    ``SilentFaceAntiSpoof`` so it is a drop-in replacement in the pipeline.
+
+    Checkpoint source: obtain from the official LitMAS release or
+    ``checkpoints/pretrained/litmas_*.pt``.  The ``live_class_index`` and
+    ``input_size`` must match the released model's training convention.
+
+    Usage in pipeline::
+
+        --liveness-mode litmas
+        --liveness-litmas-model checkpoints/pretrained/litmas_80x80.pt
+        --liveness-litmas-live-class-index 1
+    """
+
+    def __init__(
+        self,
+        model_path: str | Path,
+        *,
+        device: str | torch.device = "cpu",
+        live_class_index: int = 1,
+        input_size: tuple[int, int] = (80, 80),
+    ) -> None:
+        self.model_path = Path(model_path)
+        if not self.model_path.is_absolute():
+            self.model_path = self.model_path.resolve()
+        if not self.model_path.exists():
+            raise FileNotFoundError(f"LitMAS model not found: {self.model_path}")
+
+        self.device = torch.device(device)
+        self.live_class_index = int(live_class_index)
+        self.input_h, self.input_w = int(input_size[0]), int(input_size[1])
+
+        try:
+            # Try loading as TorchScript first (preferred distribution format).
+            self.model = torch.jit.load(str(self.model_path), map_location=self.device)
+        except Exception:
+            raise RuntimeError(
+                f"Could not load LitMAS model from {self.model_path}. "
+                "Expected a TorchScript (.pt/.ts) file. "
+                "Obtain the official LitMAS checkpoint and convert to TorchScript if needed."
+            )
+
+        self.model.eval()
+
+    def _preprocess(self, face_rgb: np.ndarray) -> torch.Tensor:
+        if face_rgb.ndim != 3 or face_rgb.shape[2] != 3:
+            raise ValueError(f"Expected HxWx3 face crop, got {face_rgb.shape}")
+        img = cv2.resize(np.asarray(face_rgb, dtype=np.uint8), (self.input_w, self.input_h), interpolation=cv2.INTER_LINEAR)
+        chw = np.transpose(img, (2, 0, 1)).astype(np.float32) / 255.0
+        return torch.from_numpy(chw).unsqueeze(0).to(self.device)
+
+    @torch.no_grad()
+    def score(self, face_rgb: np.ndarray) -> float:
+        x = self._preprocess(face_rgb)
+        logits = self.model(x)
+        if isinstance(logits, (list, tuple)):
+            logits = logits[0]
+        probs = F.softmax(logits.view(1, -1), dim=1)[0]
+        live_idx = int(self.live_class_index)
+        if live_idx < 0 or live_idx >= int(probs.shape[0]):
+            live_idx = min(1, int(probs.shape[0]) - 1)
+        return float(np.clip(float(probs[live_idx].item()), 0.0, 1.0))
+
+    def __call__(self, face_rgb: np.ndarray) -> float:
+        return self.score(face_rgb)

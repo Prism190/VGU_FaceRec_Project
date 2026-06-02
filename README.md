@@ -63,6 +63,9 @@ chmod 600 ~/.kaggle/kaggle.json
 
 ### 4) Run pipeline on a video
 
+Default tracker is **BoT-SORT** (`--tracker-backend botsort`, requires `pip install boxmot`).
+Default liveness is `always_live`; switch to **LitMAS** once you have the weights.
+
 ```bash
 ./venv/bin/python scripts/run_face_pipeline.py \
   --config configs/train_ms1m_magface_phase1_cplus_aplus_v1.yaml \
@@ -71,10 +74,36 @@ chmod 600 ~/.kaggle/kaggle.json
   --detector-model checkpoints/pretrained/yolo11n-face-age.pt \
   --face-db-root data/face_db \
   --known-db-use --known-db-refresh-from-photos \
+  --tracker-backend botsort \
+  --track-max-missed-frames 140 \
   --liveness-mode hybrid --live-threshold 0.45 \
   --out-jsonl logs/pipeline_out.jsonl \
   --out-summary logs/pipeline_out.summary.json
 ```
+
+**With LitMAS anti-spoofing** (obtain `litmas_80x80.pt` from the official release):
+
+```bash
+./venv/bin/python scripts/run_face_pipeline.py \
+  ... \
+  --liveness-mode litmas \
+  --liveness-litmas-model checkpoints/pretrained/litmas_80x80.pt \
+  --liveness-litmas-live-class-index 1 \
+  --live-threshold 0.45
+```
+
+**With BoT-SORT + ReID appearance features**:
+
+```bash
+./venv/bin/python scripts/run_face_pipeline.py \
+  ... \
+  --tracker-backend botsort \
+  --botsort-with-reid \
+  --botsort-reid-weights checkpoints/pretrained/osnet_x0_25_msmt17.pt \
+  --botsort-device cuda
+```
+
+ReID weights: download `osnet_x0_25_msmt17.pt` from the boxmot model zoo.
 
 See [`docs/face_labeling_and_ijb_clean_eval_commands.md`](docs/face_labeling_and_ijb_clean_eval_commands.md) for annotated full-pipeline commands, labeling UI, and auto-register loop.
 
@@ -243,6 +272,27 @@ data/face_db/
 ```
 
 ---
+
+## Tracker: BoT-SORT vs DeepSORT
+
+| | BoT-SORT (default) | DeepSORT |
+|--|--|--|
+| Association | Two-stage (high-conf first, then low-conf) | Single-stage cosine + IoU |
+| Occlusion | Kalman prediction keeps identity through gaps | Drops sooner without appearance |
+| ReID | Optional (plug in `osnet_x0_25_msmt17.pt`) | Always requires appearance embedder |
+| Dependency | `boxmot>=10.0` | `deep-sort-realtime` |
+
+Switch back to DeepSORT: `--tracker-backend deepsort`.
+
+## Anti-spoofing: LitMAS vs MiniFASNetV2
+
+| | LitMAS (target) | MiniFASNetV2 (current) |
+|--|--|--|
+| Architecture | Efficient-Hybrid (2025) | Depthwise MobileNet |
+| Checkpoint | Obtain from official release | Bundled in `download_assets.sh` |
+| Pipeline mode | `--liveness-mode litmas` | `--liveness-mode silent_face` |
+
+Until LitMAS weights are publicly available, use `--liveness-mode hybrid` or `--liveness-mode silent_face`.
 
 ## Docs
 

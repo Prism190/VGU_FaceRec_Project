@@ -17,6 +17,11 @@ try:
 except Exception:
     DeepSort = None
 
+try:
+    from boxmot import BoTSORT as _BoTSORT
+except Exception:
+    _BoTSORT = None
+
 
 def iou_xyxy(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
     ax1, ay1, ax2, ay2 = a
@@ -47,27 +52,42 @@ class TrackHistory:
 
 @dataclass
 class TrackManager:
-    backend: str = "deepsort"
+    backend: str = "botsort"
     iou_match_threshold: float = 0.3
     center_dist_match_threshold: float = 1.25
     iou_cost_weight: float = 0.75
     max_missed_frames: int = 20
+    # DeepSORT options
     deepsort_n_init: int = 2
     deepsort_max_iou_distance: float = 0.75
     deepsort_max_cosine_distance: float = 0.25
     deepsort_nn_budget: int | None = 100
     deepsort_nms_max_overlap: float = 1.0
     deepsort_gating_only_position: bool = False
+    # BoT-SORT options
+    botsort_device: str = "cpu"
+    botsort_model_weights: str | None = None
+    botsort_with_reid: bool = False
+    botsort_track_high_thresh: float = 0.5
+    botsort_track_low_thresh: float = 0.1
+    botsort_new_track_thresh: float = 0.6
+    botsort_match_thresh: float = 0.8
+    botsort_proximity_thresh: float = 0.5
+    botsort_appearance_thresh: float = 0.25
     _next_track_id: int = 1
     tracks: dict[int, TrackedFace] = field(default_factory=dict)
     history: dict[int, TrackHistory] = field(default_factory=dict)
     _deepsort: Any = field(default=None, init=False, repr=False)
     _deepsort_max_age: int = field(default=-1, init=False, repr=False)
     _deepsort_cfg_key: tuple[Any, ...] | None = field(default=None, init=False, repr=False)
+    _botsort: Any = field(default=None, init=False, repr=False)
 
     def __post_init__(self) -> None:
-        if str(self.backend).lower() == "deepsort":
+        backend = str(self.backend).lower()
+        if backend == "deepsort":
             self._ensure_deepsort()
+        elif backend == "botsort":
+            self._ensure_botsort()
 
     def _bbox_center(self, bbox: tuple[float, float, float, float]) -> tuple[float, float]:
         x1, y1, x2, y2 = bbox
@@ -127,6 +147,101 @@ class TrackManager:
         self._deepsort_max_age = target_max_age
         self._deepsort_cfg_key = cfg_key
 
+    def _ensure_botsort(self) -> None:
+        if _BoTSORT is None:
+            raise RuntimeError(
+                "TrackManager backend=botsort requires boxmot. "
+                "Install with: python -m pip install boxmot"
+            )
+        if self._botsort is not None:
+            return
+
+        from pathlib import Path as _Path
+
+        weights = _Path(self.botsort_model_weights) if self.botsort_model_weights else None
+        use_reid = bool(self.botsort_with_reid) and (weights is not None)
+        try:
+            self._botsort = _BoTSORT(
+                model_weights=weights,
+                device=str(self.botsort_device),
+                half=False,
+                per_class=False,
+                with_reid=use_reid,
+                track_high_thresh=float(self.botsort_track_high_thresh),
+                track_low_thresh=float(self.botsort_track_low_thresh),
+                new_track_thresh=float(self.botsort_new_track_thresh),
+                track_buffer=int(self.max_missed_frames),
+                match_thresh=float(self.botsort_match_thresh),
+            )
+        except TypeError:
+            # Older boxmot versions have a different signature — fall back to defaults.
+            self._botsort = _BoTSORT(
+                model_weights=weights,
+                device=str(self.botsort_device),
+                half=False,
+            )
+
+    def _update_botsort(
+        self,
+        detections: list[FaceDetection],
+        frame_idx: int,
+        frame_bgr: np.ndarray | None,
+    ) -> list[TrackedFace]:
+        self._ensure_botsort()
+
+        if frame_bgr is None:
+            frame_bgr = np.zeros((480, 640, 3), dtype=np.uint8)
+
+        if detections:
+            dets = np.zeros((len(detections), 6), dtype=np.float32)
+            for i, det in enumerate(detections):
+                x1, y1, x2, y2 = (float(v) for v in det.bbox_xyxy)
+                dets[i] = [x1, y1, x2, y2, float(det.score), 0.0]
+        else:
+            dets = np.zeros((0, 6), dtype=np.float32)
+
+        tracks_out = self._botsort.update(dets, frame_bgr)
+
+        active_track_ids: set[int] = set()
+        for row in tracks_out:
+            if len(row) < 5:
+                continue
+            tid = int(row[4])
+            active_track_ids.add(tid)
+
+            det_ind = int(row[7]) if len(row) > 7 else -1
+            if 0 <= det_ind < len(detections):
+                det = detections[det_ind]
+                bbox: tuple[float, ...] = tuple(float(v) for v in det.bbox_xyxy)
+                landmarks = np.asarray(det.landmarks5, dtype=np.float32)
+                missed = 0
+                last_frame = frame_idx
+            else:
+                bbox = (float(row[0]), float(row[1]), float(row[2]), float(row[3]))
+                prev = self.tracks.get(tid)
+                if prev is not None:
+                    landmarks = np.asarray(prev.landmarks5, dtype=np.float32)
+                    last_frame = int(prev.last_frame_idx)
+                else:
+                    landmarks = np.zeros((5, 2), dtype=np.float32)
+                    last_frame = frame_idx
+                missed = 0
+
+            self.tracks[tid] = TrackedFace(
+                track_id=tid,
+                bbox_xyxy=bbox,
+                landmarks5=landmarks,
+                last_frame_idx=last_frame,
+                missed_frames=missed,
+            )
+
+        for tid in list(self.tracks.keys()):
+            if tid not in active_track_ids:
+                self.tracks.pop(tid, None)
+
+        self._update_history(frame_idx=frame_idx)
+        return list(self.tracks.values())
+
     def update(
         self,
         detections: list[FaceDetection],
@@ -141,6 +256,12 @@ class TrackManager:
                 frame_idx=frame_idx,
                 frame_bgr=frame_bgr,
                 detection_embeddings=detection_embeddings,
+            )
+        if backend == "botsort":
+            return self._update_botsort(
+                detections=detections,
+                frame_idx=frame_idx,
+                frame_bgr=frame_bgr,
             )
         return self._update_hungarian(detections=detections, frame_idx=frame_idx)
 

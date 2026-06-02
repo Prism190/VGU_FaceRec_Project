@@ -1,5 +1,5 @@
 from .aggregation import TrackEmbeddingBuffer, magnitude_weighted_pool
-from .anti_spoof import SilentFaceAntiSpoof
+from .anti_spoof import LitMASAntiSpoof, SilentFaceAntiSpoof
 from .clustering import IncrementalUnknownClusterer
 from .detection import DetectionConfig, YOLO11FaceDetector
 from .face_db import (
@@ -21,6 +21,7 @@ from .types import FaceDetection, FaceObservation, TrackedFace
 
 __all__ = [
     "ANNResult",
+    "LitMASAntiSpoof",
     "append_known_identity",
     "DetectionConfig",
     "ensure_face_db_layout",

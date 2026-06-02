@@ -11,3 +11,13 @@ pandas>=2.2
 scipy>=1.12
 mxnet==1.9.1
 kagglehub>=1.0.0
+
+# Runtime pipeline (optional but recommended)
+# Face detection + landmark alignment
+ultralytics>=8.3
+
+# BoT-SORT multi-object tracker (replaces DeepSORT)
+boxmot>=10.0
+
+# ANN retrieval (numpy fallback available if not installed)
+faiss-cpu>=1.8
