@@ -472,33 +472,108 @@ class SilentFaceAntiSpoof:
         return self.score(face_rgb)
 
 
+def _remap_litmas_state_dict(state: dict) -> dict:
+    """Remap LitMAS checkpoint keys from old transformers naming to current naming.
+
+    The checkpoint was saved with transformers<4.40 which used:
+      base_model.encoder.layer.X.attention.attention.{query,key,value}
+      base_model.encoder.layer.X.{intermediate,output}.dense
+    Current transformers uses:
+      base_model.layers.X.attention.{q_proj,k_proj,v_proj,o_proj}
+      base_model.layers.X.mlp.{fc1,fc2}
+    """
+    remap: dict[str, str] = {}
+    for k in state:
+        new_k = k
+        if k.startswith("base_model.encoder.layer."):
+            # base_model.encoder.layer.N.* → base_model.layers.N.*
+            rest = k[len("base_model.encoder.layer."):]
+            idx, _, tail = rest.partition(".")
+            # attention sub-keys
+            if tail == "attention.attention.query.weight":
+                new_k = f"base_model.layers.{idx}.attention.q_proj.weight"
+            elif tail == "attention.attention.query.bias":
+                new_k = f"base_model.layers.{idx}.attention.q_proj.bias"
+            elif tail == "attention.attention.key.weight":
+                new_k = f"base_model.layers.{idx}.attention.k_proj.weight"
+            elif tail == "attention.attention.key.bias":
+                new_k = f"base_model.layers.{idx}.attention.k_proj.bias"
+            elif tail == "attention.attention.value.weight":
+                new_k = f"base_model.layers.{idx}.attention.v_proj.weight"
+            elif tail == "attention.attention.value.bias":
+                new_k = f"base_model.layers.{idx}.attention.v_proj.bias"
+            elif tail == "attention.output.dense.weight":
+                new_k = f"base_model.layers.{idx}.attention.o_proj.weight"
+            elif tail == "attention.output.dense.bias":
+                new_k = f"base_model.layers.{idx}.attention.o_proj.bias"
+            elif tail == "intermediate.dense.weight":
+                new_k = f"base_model.layers.{idx}.mlp.fc1.weight"
+            elif tail == "intermediate.dense.bias":
+                new_k = f"base_model.layers.{idx}.mlp.fc1.bias"
+            elif tail == "output.dense.weight":
+                new_k = f"base_model.layers.{idx}.mlp.fc2.weight"
+            elif tail == "output.dense.bias":
+                new_k = f"base_model.layers.{idx}.mlp.fc2.bias"
+            else:
+                new_k = f"base_model.layers.{idx}.{tail}"
+        remap[k] = new_k
+    return {remap[k]: v for k, v in state.items()}
+
+
+class _DeiTWithFaceExpert(Module):
+    """DeiT-tiny backbone + MoE experts, mirroring IAB-IITJ/LitMAS DeitWithClassifier."""
+
+    def __init__(self, deit_model: Module) -> None:
+        super().__init__()
+        self.base_model = deit_model
+        self.audio_expert = Linear(192, 512)
+        self.iris_expert = Linear(192, 512)
+        self.face_expert = Linear(192, 512)
+        self.fingerprint_expert = Linear(192, 512)
+        self.classifier = Linear(512, 2)
+
+    def forward_face(self, pixel_values: torch.Tensor) -> torch.Tensor:
+        feat = self.base_model(pixel_values=pixel_values).pooler_output
+        return self.classifier(self.face_expert(feat))
+
+
 class LitMASAntiSpoof:
-    """Inference wrapper for LitMAS (Lightweight Model for Mobile Anti-Spoofing, 2025).
+    """Inference wrapper for LitMAS (IAB-IITJ, 2025). DeiT-tiny + face expert MoE.
 
-    LitMAS uses an Efficient-Hybrid architecture optimised for edge deployment.
-    This class loads the model from a TorchScript (.pt/.ts) file or a plain
-    state-dict checkpoint, and exposes the same ``score()`` interface as
-    ``SilentFaceAntiSpoof`` so it is a drop-in replacement in the pipeline.
+    Architecture: DeiT-tiny-distilled-patch16-224 backbone with modality-specific
+    experts. Only the face expert is used here (type=2 in the original paper).
 
-    Checkpoint source: obtain from the official LitMAS release or
-    ``checkpoints/pretrained/litmas_*.pt``.  The ``live_class_index`` and
-    ``input_size`` must match the released model's training convention.
+    Class mapping: 0 = bonafide/live, 1 = attack/spoof.
+    live_class_index defaults to 0.
+
+    Weights: checkpoints/pretrained/litmas_downstream_moe.pth
+    GitHub:  https://github.com/IAB-IITJ/LitMAS
+    Requires: pip install transformers>=4.30
 
     Usage in pipeline::
 
         --liveness-mode litmas
-        --liveness-litmas-model checkpoints/pretrained/litmas_80x80.pt
-        --liveness-litmas-live-class-index 1
+        --liveness-litmas-model checkpoints/pretrained/litmas_downstream_moe.pth
     """
+
+    # ImageNet normalisation used by DeiT preprocessing
+    _MEAN = (0.485, 0.456, 0.406)
+    _STD  = (0.229, 0.224, 0.225)
 
     def __init__(
         self,
         model_path: str | Path,
         *,
         device: str | torch.device = "cpu",
-        live_class_index: int = 1,
-        input_size: tuple[int, int] = (80, 80),
+        live_class_index: int = 0,
     ) -> None:
+        try:
+            from transformers import DeiTConfig, DeiTModel
+        except ImportError as exc:
+            raise ImportError(
+                "LitMASAntiSpoof requires transformers>=4.30: pip install transformers"
+            ) from exc
+
         self.model_path = Path(model_path)
         if not self.model_path.is_absolute():
             self.model_path = self.model_path.resolve()
@@ -507,38 +582,52 @@ class LitMASAntiSpoof:
 
         self.device = torch.device(device)
         self.live_class_index = int(live_class_index)
-        self.input_h, self.input_w = int(input_size[0]), int(input_size[1])
 
-        try:
-            # Try loading as TorchScript first (preferred distribution format).
-            self.model = torch.jit.load(str(self.model_path), map_location=self.device)
-        except Exception:
-            raise RuntimeError(
-                f"Could not load LitMAS model from {self.model_path}. "
-                "Expected a TorchScript (.pt/.ts) file. "
-                "Obtain the official LitMAS checkpoint and convert to TorchScript if needed."
-            )
+        # Build DeiT-tiny-distilled architecture from config (all weights come from
+        # our checkpoint — no HuggingFace download needed).
+        cfg = DeiTConfig(
+            hidden_size=192,
+            num_hidden_layers=12,
+            num_attention_heads=3,
+            intermediate_size=768,
+            hidden_act="gelu",
+            hidden_dropout_prob=0.0,
+            attention_probs_dropout_prob=0.0,
+            layer_norm_eps=1e-12,
+            image_size=224,
+            patch_size=16,
+            num_channels=3,
+            qkv_bias=True,
+        )
+        deit = DeiTModel(cfg)
+        wrapper = _DeiTWithFaceExpert(deit)
+        raw_state = torch.load(str(self.model_path), map_location=self.device, weights_only=False)
+        state = _remap_litmas_state_dict(raw_state)
+        missing, unexpected = wrapper.load_state_dict(state, strict=True)
+        if missing:
+            raise RuntimeError(f"LitMAS checkpoint missing keys: {missing[:5]}")
 
-        self.model.eval()
+        self.model = wrapper.to(self.device).eval()
+
+        # Pre-build normalisation tensors so they move with device
+        _mean = torch.tensor(self._MEAN, device=self.device).view(1, 3, 1, 1)
+        _std  = torch.tensor(self._STD,  device=self.device).view(1, 3, 1, 1)
+        self._norm_mean = _mean
+        self._norm_std  = _std
 
     def _preprocess(self, face_rgb: np.ndarray) -> torch.Tensor:
         if face_rgb.ndim != 3 or face_rgb.shape[2] != 3:
             raise ValueError(f"Expected HxWx3 face crop, got {face_rgb.shape}")
-        img = cv2.resize(np.asarray(face_rgb, dtype=np.uint8), (self.input_w, self.input_h), interpolation=cv2.INTER_LINEAR)
+        img = cv2.resize(np.asarray(face_rgb, dtype=np.uint8), (224, 224), interpolation=cv2.INTER_LINEAR)
         chw = np.transpose(img, (2, 0, 1)).astype(np.float32) / 255.0
-        return torch.from_numpy(chw).unsqueeze(0).to(self.device)
+        x = torch.from_numpy(chw).unsqueeze(0).to(self.device)
+        return (x - self._norm_mean) / self._norm_std
 
     @torch.no_grad()
     def score(self, face_rgb: np.ndarray) -> float:
-        x = self._preprocess(face_rgb)
-        logits = self.model(x)
-        if isinstance(logits, (list, tuple)):
-            logits = logits[0]
-        probs = F.softmax(logits.view(1, -1), dim=1)[0]
-        live_idx = int(self.live_class_index)
-        if live_idx < 0 or live_idx >= int(probs.shape[0]):
-            live_idx = min(1, int(probs.shape[0]) - 1)
-        return float(np.clip(float(probs[live_idx].item()), 0.0, 1.0))
+        logits = self.model.forward_face(self._preprocess(face_rgb))
+        probs = F.softmax(logits, dim=1)[0]
+        return float(np.clip(float(probs[self.live_class_index].item()), 0.0, 1.0))
 
     def __call__(self, face_rgb: np.ndarray) -> float:
         return self.score(face_rgb)

@@ -990,8 +990,8 @@ def main() -> None:
     # LitMAS anti-spoofing options
     parser.add_argument(
         "--liveness-litmas-model",
-        default="checkpoints/pretrained/litmas_80x80.pt",
-        help="Path to LitMAS TorchScript checkpoint (used when --liveness-mode litmas)",
+        default="checkpoints/pretrained/litmas_downstream_moe.pth",
+        help="Path to LitMAS DeiT+MoE checkpoint (used when --liveness-mode litmas)",
     )
     parser.add_argument(
         "--liveness-litmas-device",
@@ -1002,16 +1002,8 @@ def main() -> None:
     parser.add_argument(
         "--liveness-litmas-live-class-index",
         type=int,
-        default=1,
-        help="Softmax class index for 'live' in LitMAS output",
-    )
-    parser.add_argument(
-        "--liveness-litmas-input-size",
-        type=int,
-        nargs=2,
-        default=[80, 80],
-        metavar=("H", "W"),
-        help="Input HxW expected by the LitMAS model",
+        default=0,
+        help="Softmax class index for 'live' in LitMAS output (0=bonafide, 1=spoof)",
     )
     parser.add_argument("--tracker-backend", choices=["deepsort", "botsort", "hungarian"], default="botsort")
     parser.add_argument(
@@ -1374,7 +1366,6 @@ def main() -> None:
             model_path=litmas_model_path,
             device=litmas_device,
             live_class_index=int(args.liveness_litmas_live_class_index),
-            input_size=tuple(int(x) for x in args.liveness_litmas_input_size),
         )
         liveness_infer = litmas.score
 

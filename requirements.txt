@@ -1,12 +1,12 @@
 # PyTorch and torchvision are installed separately in scripts/bootstrap_venv.sh
 # using the PyTorch CUDA wheel index for GPU compatibility.
 timm>=1.0.8
-numpy>=1.26,<2.0
+numpy>=2.2
 pillow>=10.0
 pyyaml>=6.0
 scikit-learn>=1.4
 tqdm>=4.66
-opencv-python-headless<4.10
+opencv-python-headless>=4.10
 pandas>=2.2
 scipy>=1.12
 mxnet==1.9.1
@@ -18,6 +18,9 @@ ultralytics>=8.3
 
 # BoT-SORT multi-object tracker (replaces DeepSORT)
 boxmot>=10.0
+
+# LitMAS anti-spoofing (DeiT-tiny MoE, IAB-IITJ 2025)
+transformers>=4.30
 
 # ANN retrieval (numpy fallback available if not installed)
 faiss-cpu>=1.8

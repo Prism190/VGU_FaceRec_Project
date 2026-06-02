@@ -174,6 +174,20 @@ MAGFACE_R18_CASIA_ID="18pSIQOHRBQ-srrYfej20S5M8X8b_7zb9"
 download_gdrive "${MAGFACE_R100_ID}" "${WEIGHT_ROOT}/magface_iresnet100_ms1mv2.pth" "MagFace iResNet100"
 download_gdrive "${MAGFACE_R18_CASIA_ID}" "${WEIGHT_ROOT}/magface_iresnet18_casia.pth" "MagFace iResNet18 CASIA"
 
+# ---------------------------
+# LitMAS anti-spoofing weights
+# ---------------------------
+# DeiT-tiny MoE model from IAB-IITJ/LitMAS (GitHub, 2025)
+LITMAS_URL="https://github.com/IAB-IITJ/LitMAS/raw/main/model_weights/downstream_moe_model_litmas.pth"
+LITMAS_OUT="${WEIGHT_ROOT}/litmas_downstream_moe.pth"
+if [ ! -f "${LITMAS_OUT}" ]; then
+    echo "[INFO] Downloading LitMAS downstream MoE model..."
+    curl -fL --max-time 120 "${LITMAS_URL}" -o "${LITMAS_OUT}" || \
+        echo "[WARN] LitMAS download failed — retry manually: curl -fL '${LITMAS_URL}' -o '${LITMAS_OUT}'"
+else
+    echo "[SKIP] LitMAS weights already exist: ${LITMAS_OUT}"
+fi
+
 echo ""
 echo "Asset download stage complete."
 echo "Archives:   ${ARCHIVE_ROOT}"

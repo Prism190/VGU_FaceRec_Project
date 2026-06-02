@@ -64,7 +64,7 @@ chmod 600 ~/.kaggle/kaggle.json
 ### 4) Run pipeline on a video
 
 Default tracker is **BoT-SORT** (`--tracker-backend botsort`, requires `pip install boxmot`).
-Default liveness is `always_live`; switch to **LitMAS** once you have the weights.
+Default liveness is `always_live`; switch to **LitMAS** with the weights bundled in `download_assets.sh`.
 
 ```bash
 ./venv/bin/python scripts/run_face_pipeline.py \
@@ -81,16 +81,17 @@ Default liveness is `always_live`; switch to **LitMAS** once you have the weight
   --out-summary logs/pipeline_out.summary.json
 ```
 
-**With LitMAS anti-spoofing** (obtain `litmas_80x80.pt` from the official release):
+**With LitMAS anti-spoofing** (weights downloaded by `download_assets.sh`):
 
 ```bash
 ./venv/bin/python scripts/run_face_pipeline.py \
   ... \
   --liveness-mode litmas \
-  --liveness-litmas-model checkpoints/pretrained/litmas_80x80.pt \
-  --liveness-litmas-live-class-index 1 \
+  --liveness-litmas-model checkpoints/pretrained/litmas_downstream_moe.pth \
   --live-threshold 0.45
 ```
+
+`live_class_index` defaults to 0 (bonafide/live = class 0 in the LitMAS DeiT-MoE model).
 
 **With BoT-SORT + ReID appearance features**:
 
@@ -286,13 +287,14 @@ Switch back to DeepSORT: `--tracker-backend deepsort`.
 
 ## Anti-spoofing: LitMAS vs MiniFASNetV2
 
-| | LitMAS (target) | MiniFASNetV2 (current) |
+| | LitMAS (default) | MiniFASNetV2 (fallback) |
 |--|--|--|
-| Architecture | Efficient-Hybrid (2025) | Depthwise MobileNet |
-| Checkpoint | Obtain from official release | Bundled in `download_assets.sh` |
+| Architecture | DeiT-tiny + MoE face expert (2025) | Depthwise MobileNet |
+| Checkpoint | `litmas_downstream_moe.pth` (via `download_assets.sh`) | `2.7_80x80_MiniFASNetV2.pth` |
+| Live class index | 0 (bonafide) | 1 |
+| Input size | 224×224 (ImageNet normalisation) | 80×80 |
 | Pipeline mode | `--liveness-mode litmas` | `--liveness-mode silent_face` |
-
-Until LitMAS weights are publicly available, use `--liveness-mode hybrid` or `--liveness-mode silent_face`.
+| Requires | `pip install transformers>=4.30` | bundled |
 
 ## Docs
 

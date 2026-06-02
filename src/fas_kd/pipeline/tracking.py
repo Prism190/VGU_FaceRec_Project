@@ -18,9 +18,14 @@ except Exception:
     DeepSort = None
 
 try:
-    from boxmot import BoTSORT as _BoTSORT
+    # boxmot>=19.0 moved BoTSORT → BotSort under trackers.bbox.botsort
+    from boxmot.trackers.bbox.botsort.botsort import BotSort as _BoTSORT
 except Exception:
-    _BoTSORT = None
+    try:
+        # Fallback: older boxmot<=10.x used top-level export name BoTSORT
+        from boxmot import BoTSORT as _BoTSORT  # type: ignore[no-redef]
+    except Exception:
+        _BoTSORT = None
 
 
 def iou_xyxy(a: tuple[float, float, float, float], b: tuple[float, float, float, float]) -> float:
@@ -156,30 +161,38 @@ class TrackManager:
         if self._botsort is not None:
             return
 
-        from pathlib import Path as _Path
+        use_reid = bool(self.botsort_with_reid)
+        reid_model = None
 
-        weights = _Path(self.botsort_model_weights) if self.botsort_model_weights else None
-        use_reid = bool(self.botsort_with_reid) and (weights is not None)
+        if use_reid and self.botsort_model_weights:
+            # boxmot>=19.0: load ReID model externally and pass the object
+            try:
+                from boxmot import REID_MODELS  # type: ignore
+                from pathlib import Path as _Path
+                reid_model = REID_MODELS["osnet_x0_25"](  # type: ignore
+                    weights=_Path(self.botsort_model_weights),
+                    device=str(self.botsort_device),
+                    half=False,
+                )
+            except Exception:
+                use_reid = False
+
         try:
+            # boxmot>=19.0 API: reid_model is a pre-built object; no device/half/model_weights args
             self._botsort = _BoTSORT(
-                model_weights=weights,
-                device=str(self.botsort_device),
-                half=False,
-                per_class=False,
+                reid_model=reid_model,
                 with_reid=use_reid,
                 track_high_thresh=float(self.botsort_track_high_thresh),
                 track_low_thresh=float(self.botsort_track_low_thresh),
                 new_track_thresh=float(self.botsort_new_track_thresh),
                 track_buffer=int(self.max_missed_frames),
                 match_thresh=float(self.botsort_match_thresh),
+                proximity_thresh=float(self.botsort_proximity_thresh),
+                appearance_thresh=float(self.botsort_appearance_thresh),
             )
         except TypeError:
-            # Older boxmot versions have a different signature — fall back to defaults.
-            self._botsort = _BoTSORT(
-                model_weights=weights,
-                device=str(self.botsort_device),
-                half=False,
-            )
+            # Last-resort fallback for any other boxmot variant
+            self._botsort = _BoTSORT(with_reid=False)
 
     def _update_botsort(
         self,

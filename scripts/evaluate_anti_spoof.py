@@ -21,6 +21,7 @@ if str(SRC_ROOT) not in sys.path:
     sys.path.insert(0, str(SRC_ROOT))
 
 from fas_kd.pipeline import SilentFaceAntiSpoof
+from fas_kd.pipeline.anti_spoof import LitMASAntiSpoof
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp"}
 LIVE_TOKENS = {"1", "live", "real", "bona_fide", "bonafide", "genuine"}
@@ -254,7 +255,13 @@ def evaluate(
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Evaluate anti-spoof model with PAD metrics")
-    parser.add_argument("--model-path", required=True, help="Path to Silent-Face .pth model")
+    parser.add_argument("--model-path", required=True, help="Path to anti-spoof model checkpoint")
+    parser.add_argument(
+        "--model-type",
+        choices=["silent_face", "litmas"],
+        default="silent_face",
+        help="Model type: silent_face (MiniFASNet) or litmas (DeiT-tiny MoE)",
+    )
     parser.add_argument(
         "--manifest",
         default="",
@@ -326,12 +333,19 @@ def main() -> None:
     if not samples:
         raise RuntimeError("No evaluation samples were loaded")
 
-    model = SilentFaceAntiSpoof(
-        model_path=model_path,
-        device=device,
-        live_class_index=int(args.live_class_index),
-        expect_bgr_input=str(args.input_color).lower() == "bgr",
-    )
+    if str(args.model_type) == "litmas":
+        model = LitMASAntiSpoof(
+            model_path=model_path,
+            device=device,
+            live_class_index=int(args.live_class_index),
+        )
+    else:
+        model = SilentFaceAntiSpoof(
+            model_path=model_path,
+            device=device,
+            live_class_index=int(args.live_class_index),
+            expect_bgr_input=str(args.input_color).lower() == "bgr",
+        )
 
     metrics = evaluate(
         model=model,
