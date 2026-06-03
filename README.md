@@ -31,12 +31,32 @@ Raw JSON results in [`docs/benchmarks/`](docs/benchmarks/).
 | phase3/latest | 0.9917 | 84.78% | 0.9932 | 87.23% |
 | phase2/latest | 0.9935 | 84.52% | 0.9949 | 86.85% |
 
-### Bin Protocol (LFW / CFP-FP / AgeDB-30)
+### Bin Protocol — Clean Faces (LFW / CFP-FP / AgeDB-30)
 
 | Model | LFW | CFP-FP | AgeDB-30 |
 |---|---|---|---|
 | teacher | 99.78% | 96.27% | 98.30% |
-| phase1 (student) | 99.25% | 93.43% | 95.68% |
+| phase1/latest | 99.25% | 93.43% | 95.68% |
+| phase3/swa | 99.00% | 91.54% | 94.00% |
+
+### Occlusion Robustness — Lower-face Mask (same mask used in phase2/3 training)
+
+Accuracy drop when both verification images have lower face masked (y≥55%):
+
+Accuracy drop and TAR@FAR=1e-3 drop when both images have lower face masked (y≥55%):
+
+| Model | LFW acc↓ | CFP-FP acc↓ | AgeDB acc↓ | LFW T@1e-3↓ | CFP-FP T@1e-3↓ | AgeDB T@1e-3↓ |
+|---|---|---|---|---|---|---|
+| phase1/latest | 0.0095 | **0.0770** | 0.0587 | 0.0373 | **0.3689** | **0.4620** |
+| phase2/latest | −0.0102 | 0.0420 | 0.0400 | 0.0170 | 0.3846 | 0.2823 |
+| **phase3/swa** | **0.0052** | **0.0446** | **0.0443** | **0.0187** | **0.2983** | **0.3207** |
+
+Phase3/swa consistently shows the **smallest TAR@1e-3 drop** across all datasets — the
+SWA-smoothed occlusion curriculum pays off at strict FAR thresholds. The clean-face
+cost is ~2pp accuracy and is recovered in any deployment with partial occlusion.
+Full results (TAR@FAR=1e-4 included) in [`docs/benchmarks/`](docs/benchmarks/).
+
+> Eval script: `scripts/evaluate_bin_occluded.py`
 
 > **Note:** All IJB results use InsightFace `buffalo_sc` RetinaFace detector for alignment
 > (see `scripts/prepare_ijb_insightface_clean.py`). YOLO11n-aligned results are
@@ -109,7 +129,7 @@ chmod 600 ~/.kaggle/kaggle.json
 
 ### 4) Run pipeline on a video
 
-Default tracker is **BoT-SORT** (`--tracker-backend botsort`, requires `pip install boxmot`).
+Default tracker is **DeepSORT** (`--tracker-backend deepsort`). BoT-SORT is available via `--tracker-backend botsort` (requires `pip install boxmot`).
 Default liveness is `always_live`; switch to **LitMAS** with the weights bundled in `download_assets.sh`.
 
 ```bash

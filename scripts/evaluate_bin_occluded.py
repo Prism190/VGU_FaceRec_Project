@@ -66,6 +66,17 @@ def _best_accuracy(scores: np.ndarray, labels: np.ndarray) -> tuple[float, float
     return best_acc, best_thr
 
 
+def _tar_at_far(scores: np.ndarray, labels: np.ndarray, target_far: float) -> float:
+    from sklearn.metrics import roc_curve
+    mask = np.isfinite(scores)
+    scores, labels = scores[mask], labels[mask]
+    if len(np.unique(labels)) < 2:
+        return 0.0
+    fpr, tpr, _ = roc_curve(labels, scores, pos_label=1)
+    idx = np.where(fpr <= target_far)[0]
+    return float(tpr[idx[-1]]) if idx.size > 0 else 0.0
+
+
 class _MaskedBinDataset(BinPairDataset):
     """BinPairDataset with optional lower-face mask applied to both images."""
     def __init__(self, bin_path, transform, apply_mask: bool = False):
@@ -94,15 +105,19 @@ def _run_bin(model, bin_path, transform, device, apply_mask, num_workers=4, batc
         with torch.autocast(device_type=device.type, enabled=device.type == "cuda"):
             ea = model(a) + model(torch.flip(a, dims=[3]))
             eb = model(b) + model(torch.flip(b, dims=[3]))
-        ea = F.normalize(torch.nan_to_num(ea, nan=0.0), dim=1)
-        eb = F.normalize(torch.nan_to_num(eb, nan=0.0), dim=1)
+        ea = torch.nan_to_num(F.normalize(torch.nan_to_num(ea, nan=0.0), dim=1), nan=0.0)
+        eb = torch.nan_to_num(F.normalize(torch.nan_to_num(eb, nan=0.0), dim=1), nan=0.0)
         s = (ea * eb).sum(dim=1).cpu().numpy()
         scores_list.append(s)
         labels_list.append(y)
     scores = np.concatenate(scores_list)
     labels = np.concatenate(labels_list)
     acc, _ = _best_accuracy(scores, labels)
-    return float(acc)
+    return {
+        "accuracy": float(acc),
+        "tar_far_1e-3": _tar_at_far(scores, labels, 1e-3),
+        "tar_far_1e-4": _tar_at_far(scores, labels, 1e-4),
+    }
 
 
 def main():
@@ -150,13 +165,20 @@ def main():
             if not bin_path.exists():
                 print(f"  [skip] {ds_name}", flush=True)
                 continue
-            clean_acc = _run_bin(model, bin_path, transform, device,
-                                  apply_mask=False, num_workers=args.num_workers)
-            masked_acc = _run_bin(model, bin_path, transform, device,
-                                   apply_mask=True, num_workers=args.num_workers)
-            drop = clean_acc - masked_acc
-            print(f"  {ds_name:<10} clean={clean_acc:.4f}  masked={masked_acc:.4f}  drop={drop:+.4f}", flush=True)
-            results[ds_name] = {"clean": clean_acc, "masked": masked_acc, "drop": drop}
+            clean  = _run_bin(model, bin_path, transform, device,
+                              apply_mask=False, num_workers=args.num_workers)
+            masked = _run_bin(model, bin_path, transform, device,
+                              apply_mask=True,  num_workers=args.num_workers)
+            drop_acc = clean["accuracy"] - masked["accuracy"]
+            drop_t3  = clean["tar_far_1e-3"] - masked["tar_far_1e-3"]
+            print(f"  {ds_name:<10} clean={clean['accuracy']:.4f}  masked={masked['accuracy']:.4f}"
+                  f"  drop={drop_acc:+.4f} | TAR@1e-3 clean={clean['tar_far_1e-3']:.4f}"
+                  f"  masked={masked['tar_far_1e-3']:.4f}  drop={drop_t3:+.4f}", flush=True)
+            results[ds_name] = {
+                "clean_acc": clean["accuracy"],  "masked_acc": masked["accuracy"],  "drop_acc": drop_acc,
+                "clean_tar_1e3": clean["tar_far_1e-3"], "masked_tar_1e3": masked["tar_far_1e-3"], "drop_tar_1e3": drop_t3,
+                "clean_tar_1e4": clean["tar_far_1e-4"], "masked_tar_1e4": masked["tar_far_1e-4"],
+            }
 
         all_results[label] = results
         (out_dir / f"{label.replace('/','_')}.json").write_text(json.dumps(results, indent=2))
@@ -167,12 +189,14 @@ def main():
     # Summary table
     print("\n" + "=" * 75, flush=True)
     print(f"OCCLUSION ROBUSTNESS — lower-face mask, zero-fill y≥55% (training mask)", flush=True)
-    print(f"{'Model':<14} {'Dataset':<11} {'Clean':>8} {'Masked':>8} {'Drop':>8}", flush=True)
-    print("-" * 75, flush=True)
+    print(f"{'Model':<14} {'Dataset':<11} {'Acc Cln':>8} {'Acc Msk':>8} {'Drop':>7} {'T@1e-3 C':>9} {'T@1e-3 M':>9} {'Drop':>7}", flush=True)
+    print("-" * 85, flush=True)
     for label, res in all_results.items():
         for ds, m in res.items():
-            print(f"{label:<14} {ds:<11} {m['clean']:>8.4f} {m['masked']:>8.4f} {m['drop']:>+8.4f}", flush=True)
-    print("=" * 75, flush=True)
+            print(f"{label:<14} {ds:<11} "
+                  f"{m['clean_acc']:>8.4f} {m['masked_acc']:>8.4f} {m['drop_acc']:>+7.4f} "
+                  f"{m['clean_tar_1e3']:>9.4f} {m['masked_tar_1e3']:>9.4f} {m['drop_tar_1e3']:>+7.4f}", flush=True)
+    print("=" * 85, flush=True)
 
     (out_dir / "summary.json").write_text(json.dumps(all_results, indent=2))
     print(f"\nResults in {out_dir}", flush=True)
