@@ -24,25 +24,37 @@ PHASES = [
         "name": "phase1",
         "config": "configs/train_ms1m_magface_phase1_cplus_aplus_v1.yaml",
         "checkpoint": "runs/ms1m_magface_phase1_cplus_aplus_v1/checkpoints/latest.pt",
-        "description": "Phase 1 — KD + MagFace, no occlusion. Best overall IJB performance.",
+        "description": "Phase 1 latest (epoch 39) — KD + MagFace. Best overall IJB: IJBB 87.98% / IJBC 90.65% TAR@1e-4.",
+    },
+    {
+        "name": "phase1_best",
+        "config": "configs/train_ms1m_magface_phase1_cplus_aplus_v1.yaml",
+        "checkpoint": "runs/ms1m_magface_phase1_cplus_aplus_v1/checkpoints/best.pt",
+        "description": "Phase 1 best (epoch 29) — highest bin protocol mean accuracy (96.37%).",
     },
     {
         "name": "phase2",
         "config": "configs/train_ms1m_magface_phase2_occlusion_spatial_v1.yaml",
         "checkpoint": "runs/ms1m_magface_phase2_occlusion_spatial_v1/checkpoints/latest.pt",
-        "description": "Phase 2 — adds occlusion curriculum + spatial KD.",
+        "description": "Phase 2 latest (epoch 32) — occlusion curriculum + spatial KD. Weaker than phase1/phase3.",
     },
     {
         "name": "phase3",
         "config": "configs/train_ms1m_magface_phase3_trueasym_swa_v1.yaml",
         "checkpoint": "runs/ms1m_magface_phase3_trueasym_swa_v1/checkpoints/latest.pt",
-        "description": "Phase 3 latest — true asymmetric distillation, epoch 39.",
+        "description": "Phase 3 latest (epoch 39) — true asymmetric distillation.",
     },
     {
         "name": "phase3_swa",
         "config": "configs/train_ms1m_magface_phase3_trueasym_swa_v1.yaml",
         "checkpoint": "runs/ms1m_magface_phase3_trueasym_swa_v1/checkpoints/swa.pt",
-        "description": "Phase 3 SWA — stochastic weight averaging (epochs 35-39). Best occlusion robustness.",
+        "description": "Phase 3 SWA (epochs 35-39 avg) — best occlusion robustness; recommended for masked/occluded deployment.",
+    },
+    {
+        "name": "phase3_best",
+        "config": "configs/train_ms1m_magface_phase3_trueasym_swa_v1.yaml",
+        "checkpoint": "runs/ms1m_magface_phase3_trueasym_swa_v1/checkpoints/best.pt",
+        "description": "Phase 3 best (epoch 13) — highest LFW accuracy (99.43%) among phase3 checkpoints.",
     },
 ]
 
