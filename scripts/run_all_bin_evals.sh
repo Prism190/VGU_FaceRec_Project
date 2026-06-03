@@ -2,7 +2,7 @@
 # Run bin protocol (LFW/CFP-FP/AgeDB-30/CPLFW/CALFW) for all key checkpoints.
 # Outputs go to results/bin_protocol/ with intuitive names.
 set -euo pipefail
-ROOT=/home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PY="$ROOT/venv/bin/python"
 OUT="$ROOT/results/bin_protocol"
 mkdir -p "$OUT"

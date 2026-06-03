@@ -11,7 +11,7 @@ This document maps the implemented scaffolding to the target production pipeline
 Run 40-epoch long cycle:
 
 ```bash
-cd /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4
+cd /path/to/fas-kd-mobilenetv4
 CONFIG_PATH=configs/train_cycle_v4_long40_mask015.yaml bash scripts/launch_train.sh
 ```
 

@@ -75,7 +75,7 @@ The teacher collapses on CPLFW (−72.4 pp) and AgeDB (−54.1 pp). Phase3/swa o
 ### 1) Environment
 
 ```bash
-cd /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4
+cd /path/to/fas-kd-mobilenetv4
 bash scripts/bootstrap_venv.sh
 source venv/bin/activate
 ```

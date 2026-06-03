@@ -6,7 +6,7 @@
 #   bash scripts/run_ijb_eval_chain.sh --insightface   # InsightFace-cleaned
 set -euo pipefail
 
-ROOT=/home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PY="$ROOT/venv/bin/python"
 DATE=$(date +%Y%m%d_%H%M)
 

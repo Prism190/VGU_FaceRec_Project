@@ -2,7 +2,7 @@
 
 ## 0) Enter Project
 ```bash
-cd /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4
+cd /path/to/fas-kd-mobilenetv4
 ```
 
 ---

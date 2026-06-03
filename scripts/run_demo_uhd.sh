@@ -6,7 +6,7 @@
 #   TRACKER=botsort  LIVENESS=silent_face bash scripts/run_demo_uhd.sh botsort_demo
 set -euo pipefail
 
-ROOT=/home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PY="$ROOT/venv/bin/python"
 TAG="${1:-demo}"
 TRACKER="${TRACKER:-deepsort}"

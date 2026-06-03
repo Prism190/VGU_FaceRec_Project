@@ -5,7 +5,7 @@
 # Gathers everything into results/ with intuitive names.
 set -euo pipefail
 
-ROOT=/home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 PY="$ROOT/venv/bin/python"
 cd "$ROOT"
 
@@ -142,7 +142,7 @@ echo "=== BIN PROTOCOL SUMMARY ==="
 import json, glob, os
 from pathlib import Path
 
-out = Path("/home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/results/bin_protocol")
+import os; out = Path(os.environ["BIN_OUT"])
 files = sorted(out.glob("*.json"))
 order = ["phase1_latest", "phase1_best", "phase3_latest", "phase3_swa", "phase3_best"]
 print(f"{'checkpoint':<18} {'LFW':>8} {'CFP-FP':>8} {'AgeDB':>8} {'mean':>8}")
@@ -171,7 +171,7 @@ echo "=== IJB SUMMARY (TAR@1e-4) ==="
 import json
 from pathlib import Path
 
-ijb_dir = Path("/home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/results/ijb")
+import os; ijb_dir = Path(os.environ["IJB_OUT"])
 print(f"{'checkpoint':<22} {'IJBB TAR@1e-4':>14} {'IJBC TAR@1e-4':>14}")
 print("-" * 52)
 order = ["teacher", "phase1_latest", "phase1_best", "phase2_latest",
