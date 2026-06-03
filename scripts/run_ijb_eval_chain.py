@@ -35,9 +35,9 @@ PHASE3_CFG = PROJECT_ROOT / "configs/train_ms1m_magface_phase3_trueasym_swa_v1.y
 SPECS = [
     # (label, config, checkpoint-or-"teacher")
     ("teacher", PHASE1_CFG, "teacher"),
-    ("phase1",  PHASE1_CFG, PROJECT_ROOT / "runs/ms1m_magface_phase1_cplus_aplus_v1/checkpoints/latest.pt"),
-    ("phase2",  PHASE2_CFG, PROJECT_ROOT / "runs/ms1m_magface_phase2_occlusion_spatial_v1/checkpoints/latest.pt"),
     ("phase3",  PHASE3_CFG, PROJECT_ROOT / "runs/ms1m_magface_phase3_trueasym_swa_v1/checkpoints/latest.pt"),
+    ("phase2",  PHASE2_CFG, PROJECT_ROOT / "runs/ms1m_magface_phase2_occlusion_spatial_v1/checkpoints/latest.pt"),
+    ("phase1",  PHASE1_CFG, PROJECT_ROOT / "runs/ms1m_magface_phase1_cplus_aplus_v1/checkpoints/latest.pt"),
 ]
 
 
@@ -70,6 +70,20 @@ def _run(label: str, model: torch.nn.Module, cfg: dict, clean_root: Path,
         if not ds_root.exists():
             print(f"  [{label}] {dataset} root not found: {ds_root} — skip")
             continue
+        # Wait for alignment to finish if needed (IJBC may still be processing)
+        loose_crop = ds_root / "loose_crop"
+        if loose_crop.exists():
+            import time, glob as _glob
+            n = len(list(loose_crop.glob("*.jpg")))
+            # IJBB ~227k images, IJBC ~469k images
+            expected = 460000 if dataset == "IJBC" else 220000
+            if n < expected:
+                print(f"  [{label}] {dataset}: only {n} images present, waiting for alignment to finish...", flush=True)
+                while len(list(loose_crop.glob("*.jpg"))) < expected:
+                    time.sleep(60)
+                    current = len(list(loose_crop.glob("*.jpg")))
+                    print(f"    ... {current} images so far", flush=True)
+                print(f"  [{label}] {dataset}: alignment complete, starting eval", flush=True)
         print(f"  [{label}] evaluating {dataset} ...", flush=True)
         m = evaluate_ijb_template_1to1(
             model=model,
@@ -97,6 +111,8 @@ def main() -> None:
     parser = argparse.ArgumentParser(description="IJB eval chain: teacher + phase1 + phase2 + phase3")
     parser.add_argument("--insightface", action="store_true",
                         help="Use InsightFace-cleaned data instead of YOLO-cleaned")
+    parser.add_argument("--skip-teacher", action="store_true",
+                        help="Skip teacher eval (use when teacher results already exist)")
     parser.add_argument("--clean-root", default=None,
                         help="Override clean data root directory")
     parser.add_argument("--batch-size", type=int, default=128)
@@ -131,6 +147,8 @@ def main() -> None:
 
     all_results = []
     for label, cfg_path, ckpt in SPECS:
+        if args.skip_teacher and label == "teacher":
+            continue
         if not Path(cfg_path).exists():
             print(f"[skip] {label}: config not found")
             continue
