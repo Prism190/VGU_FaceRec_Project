@@ -188,6 +188,31 @@ else
     echo "[SKIP] LitMAS weights already exist: ${LITMAS_OUT}"
 fi
 
+# ---------------------------
+# Student inference checkpoints (GitHub Releases)
+# ---------------------------
+RELEASE_BASE="https://github.com/Prism190/AI_FaceRec_VGU_2026/releases/download/v1.0-vgu2026"
+STUDENT_ROOT="${ROOT}/runs"
+
+download_student() {
+    local PHASE="$1"
+    local RUN_DIR="$2"
+    local FNAME="mobilenetv4_student_${PHASE}.pt"
+    local OUT="${STUDENT_ROOT}/${RUN_DIR}/checkpoints/${FNAME}"
+    mkdir -p "$(dirname "${OUT}")"
+    if [ ! -f "${OUT}" ]; then
+        echo "[INFO] Downloading student checkpoint: ${FNAME} ..."
+        curl -fL --max-time 300 "${RELEASE_BASE}/${FNAME}" -o "${OUT}" || \
+            echo "[WARN] Download failed — get manually from https://github.com/Prism190/AI_FaceRec_VGU_2026/releases/tag/v1.0-vgu2026"
+    else
+        echo "[SKIP] Student checkpoint exists: ${OUT}"
+    fi
+}
+
+download_student "phase1" "ms1m_magface_phase1_cplus_aplus_v1"
+download_student "phase2" "ms1m_magface_phase2_occlusion_spatial_v1"
+download_student "phase3" "ms1m_magface_phase3_trueasym_swa_v1"
+
 echo ""
 echo "Asset download stage complete."
 echo "Archives:   ${ARCHIVE_ROOT}"

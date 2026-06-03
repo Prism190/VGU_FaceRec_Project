@@ -16,11 +16,40 @@ See [`docs/pipeline_next_stage.md`](docs/pipeline_next_stage.md) for the full ru
 
 ---
 
+## Benchmarks
+
+Evaluated with InsightFace RetinaFace alignment + horizontal flip-TTA.
+Raw JSON results in [`docs/benchmarks/`](docs/benchmarks/).
+
+### IJB Template 1:1 Verification
+
+| Model | IJBB AUC | IJBB TAR@1e-4 | IJBC AUC | IJBC TAR@1e-4 |
+|---|---|---|---|---|
+| teacher (iResNet-100) | 0.9922 | 93.14% | 0.9960 | 97.64% |
+| **phase1** (recommended) | **0.9912** | **87.98%** | **0.9937** | **90.65%** |
+| phase3 | 0.9917 | 84.78% | 0.9932 | 87.23% |
+| phase2 | 0.9935 | 84.52% | 0.9949 | 86.85% |
+
+### Bin Protocol (LFW / CFP-FP / AgeDB-30)
+
+| Model | LFW | CFP-FP | AgeDB-30 |
+|---|---|---|---|
+| teacher | 99.78% | 96.27% | 98.30% |
+| phase1 (student) | 99.25% | 93.43% | 95.68% |
+
+> **Note:** All IJB results use InsightFace `buffalo_sc` RetinaFace detector for alignment
+> (see `scripts/prepare_ijb_insightface_clean.py`). YOLO11n-aligned results are
+> ~40 points lower at TAR@1e-4 due to landmark precision; alignment is the dominant
+> factor at strict FAR thresholds.
+
+---
+
 ## Quick start — pipeline demo
 
-The recommended checkpoint is **phase3** (`runs/ms1m_magface_phase3_trueasym_swa_v1`).
-It is the best student on all YOLO-cleaned IJB metrics: IJBB TAR@1e-4=0.467, IJBC=0.481.
-Phase ordering: phase3 > phase1 > phase2.
+The recommended checkpoint is **phase1** (`runs/ms1m_magface_phase1_cplus_aplus_v1`).
+It achieves the best TAR@1e-4 on IJB (87.98% IJBB / 90.65% IJBC) despite simpler
+training — phase2/3 occlusion augmentation slightly degrades clean-face precision.
+Phase1 > phase3 > phase2 on strict IJB FAR.
 
 ### 1) Environment
 
@@ -36,16 +65,29 @@ Install optional runtime deps (FAISS, Ultralytics for YOLO11):
 venv/bin/python -m pip install ultralytics faiss-cpu
 ```
 
-### 2) Download pretrained weights
+### 2) Download student checkpoint
+
+Lean inference checkpoints (~37–39 MB) are published as GitHub Release assets.
+`download_assets.sh` fetches them automatically:
 
 ```bash
 bash scripts/download_assets.sh
 ```
 
+Or download manually from the
+[**Releases page**](https://github.com/Prism190/AI_FaceRec_VGU_2026/releases/tag/v1.0-vgu2026):
+
+| File | Size | Description |
+|---|---|---|
+| `mobilenetv4_student_phase1.pt` | 36.8 MB | **Recommended** — best IJB TAR@1e-4 |
+| `mobilenetv4_student_phase3.pt` | 38.8 MB | Occlusion-robust via SWA |
+| `mobilenetv4_student_phase2.pt` | 38.8 MB | Spatial KD variant |
+
 Downloads `checkpoints/pretrained/`:
-- `magface_iresnet100_ms1mv2.pth` — teacher model
-- `yolo11n-face-age.pt` — face detector (pretrained, no training required)
-- `2.7_80x80_MiniFASNetV2.pth` — anti-spoofing model (MiniFASNetV2)
+- `magface_iresnet100_ms1mv2.pth` — teacher model (270 MB, from MagFace official)
+- `yolo11n-face-age.pt` — face detector (pretrained)
+- `2.7_80x80_MiniFASNetV2.pth` — anti-spoofing model
+- `litmas_downstream_moe.pth` — LitMAS anti-spoofing (DeiT-tiny, 22.8 MB)
 
 Kaggle token required for LFW / AgeDB-30:
 ```bash
@@ -70,7 +112,7 @@ Default liveness is `always_live`; switch to **LitMAS** with the weights bundled
 ```bash
 ./venv/bin/python scripts/run_face_pipeline.py \
   --config configs/train_ms1m_magface_phase1_cplus_aplus_v1.yaml \
-  --checkpoint latest \
+  --checkpoint runs/ms1m_magface_phase1_cplus_aplus_v1/checkpoints/latest.pt \
   --source /path/to/video.mp4 \
   --detector-model checkpoints/pretrained/yolo11n-face-age.pt \
   --face-db-root data/face_db \
@@ -151,10 +193,10 @@ torchrun --standalone --nproc_per_node=2 scripts/ddp_smoke_test.py
 ### 4) Train — recommended phase1 config
 
 ```bash
-CONFIG_PATH=configs/train_ms1m_magface_phase3_trueasym_swa_v1.yaml bash scripts/launch_train.sh
+CONFIG_PATH=configs/train_ms1m_magface_phase1_cplus_aplus_v1.yaml bash scripts/launch_train.sh
 ```
 
-Key settings in phase3 config:
+Key settings in phase1 config:
 - backbone: `mobilenetv4_conv_medium`
 - loss: MagFace classification + MSE cosine KD (ramp 5→8 over 8 epochs)
 - mask-free warmup: first 20 epochs, masking enabled after
