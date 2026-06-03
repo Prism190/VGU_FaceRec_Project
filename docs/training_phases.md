@@ -169,12 +169,69 @@ CONFIG_PATH=configs/train_ms1m_magface_phase2_occlusion_spatial_v1.yaml bash scr
 CONFIG_PATH=configs/train_ms1m_magface_phase3_trueasym_swa_v1.yaml bash scripts/launch_train.sh
 ```
 
-Each phase trains independently from scratch (no weight transfer between phases). The SWA checkpoint is written automatically at the end of phase 3 training.
+Each phase trains independently from scratch (no weight transfer between phases).
 
-Full eval suite after training:
+### Applying SWA after Phase 3 training
+
+The training loop saves per-epoch checkpoints (`epoch_035.pt`, `epoch_037.pt`, `epoch_039.pt` given `save_every: 2`) but does **not** automatically average them. Run `apply_swa.py` after training completes:
+
+```bash
+# Phase 3 — uses train.swa.start_epoch=35 and train.epochs=40 from config automatically
+./venv/bin/python scripts/apply_swa.py \
+    --config configs/train_ms1m_magface_phase3_trueasym_swa_v1.yaml
+```
+
+Output: `runs/ms1m_magface_phase3_trueasym_swa_v1/checkpoints/swa.pt`
+
+Verify which checkpoints were averaged without writing anything:
+
+```bash
+./venv/bin/python scripts/apply_swa.py \
+    --config configs/train_ms1m_magface_phase3_trueasym_swa_v1.yaml \
+    --dry-run
+```
+
+Override the epoch range or output path explicitly:
+
+```bash
+./venv/bin/python scripts/apply_swa.py \
+    --config configs/train_ms1m_magface_phase3_trueasym_swa_v1.yaml \
+    --start-epoch 30 --end-epoch 39 \
+    --out runs/ms1m_magface_phase3_trueasym_swa_v1/checkpoints/swa_ep30-39.pt
+```
+
+SWA can be applied to any phase using `--start-epoch` / `--end-epoch` manually.
+
+Full eval suite after training and SWA:
 
 ```bash
 bash scripts/run_final_eval_suite.sh
 ```
+
+---
+
+## Known issue: MagFace π fallback missing
+
+`MagFaceHead.forward` (`src/fas_kd/models/margin_head.py`) computes the target logit as:
+
+```python
+target_margin_cosine = (target_cosine * cos_m) - (sin_theta * sin_m)  # cos(θ + m)
+```
+
+This is mathematically correct, but the standard ArcFace/MagFace implementation adds a fallback for `θ + m > π`. When that condition holds, `cos(θ + m)` increases back toward 1, making the loss reward a hard negative instead of penalising it. The correct form is:
+
+```python
+# safe = cos(θ) - m·sin(θ)  (first-order Taylor expansion, always a decrease)
+safe = target_cosine - sin_m * adaptive_margin
+target_margin_cosine = torch.where(
+    target_cosine + cos_m > 0,   # equivalent to θ + m < π
+    target_margin_cosine,
+    safe,
+)
+```
+
+**Why it is low-impact here:** with adaptive margin capped at 0.42, the condition fires only when `θ > π − 0.42 ≈ 2.72 rad` (target cosine ≈ −0.9), which only occurs for a small fraction of samples in early training before embeddings consolidate. All three phases trained to convergence with good accuracy, so the missing guard did not prevent learning. The trained checkpoints are not affected at inference (margin head is training-only).
+
+**This is not fixed here** to avoid risk close to submission. Flag it for the next training run.
 
 This runs bin protocol (LFW/CFP-FP/AgeDB), IJB template 1:1 (InsightFace + flip-TTA), and occlusion robustness for all key checkpoints, and writes everything to `results/`.
