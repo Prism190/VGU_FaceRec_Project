@@ -22,8 +22,7 @@ from fas_kd.evaluation.ijb_template import evaluate_ijb_template_1to1
 from fas_kd.models.teacher import build_frozen_teacher
 from fas_kd.utils.config import load_yaml_config
 
-CLEAN_ROOT = PROJECT_ROOT / "data" / "processed" / "ijb_clean_yolo11"
-OUT_DIR = PROJECT_ROOT / "logs" / "teacher_identity_eval"
+_DEFAULT_CLEAN_ROOT = PROJECT_ROOT / "data" / "processed" / "ijb_clean_yolo11"
 
 PHASE_EXISTING = {
     "phase1": {
@@ -48,6 +47,14 @@ def _fmt(v) -> str:
 
 
 def main() -> None:
+    import argparse
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--clean-root", default=str(_DEFAULT_CLEAN_ROOT))
+    parser.add_argument("--out-dir", default=None)
+    args = parser.parse_args()
+
+    CLEAN_ROOT = Path(args.clean_root)
+    OUT_DIR = Path(args.out_dir) if args.out_dir else PROJECT_ROOT / "logs" / "teacher_identity_eval"
     OUT_DIR.mkdir(parents=True, exist_ok=True)
 
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
