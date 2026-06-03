@@ -36,7 +36,13 @@ PHASES = [
         "name": "phase3",
         "config": "configs/train_ms1m_magface_phase3_trueasym_swa_v1.yaml",
         "checkpoint": "runs/ms1m_magface_phase3_trueasym_swa_v1/checkpoints/latest.pt",
-        "description": "Phase 3 — true asymmetric distillation + SWA.",
+        "description": "Phase 3 latest — true asymmetric distillation, epoch 39.",
+    },
+    {
+        "name": "phase3_swa",
+        "config": "configs/train_ms1m_magface_phase3_trueasym_swa_v1.yaml",
+        "checkpoint": "runs/ms1m_magface_phase3_trueasym_swa_v1/checkpoints/swa.pt",
+        "description": "Phase 3 SWA — stochastic weight averaging (epochs 35-39). Best occlusion robustness.",
     },
 ]
 
