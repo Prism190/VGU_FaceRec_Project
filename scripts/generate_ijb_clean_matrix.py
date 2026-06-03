@@ -93,6 +93,7 @@ def _evaluate_with_retry(
                 batch_size=batch_size,
                 num_workers=num_workers,
                 template_pooling=template_pooling,
+                use_flip=True,
             )
         except Exception as exc:
             bad_path = _parse_corrupt_path(exc)

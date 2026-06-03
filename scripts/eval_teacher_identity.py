@@ -78,6 +78,7 @@ def main() -> None:
             target_fars=target_fars,
             batch_size=128,
             num_workers=4,
+            use_flip=True,
             template_pooling="magface_weighted",
         )
         out_path = OUT_DIR / f"eval_teacher_identity_clean_{dataset.lower()}.json"

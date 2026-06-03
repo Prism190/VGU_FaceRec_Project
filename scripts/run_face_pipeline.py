@@ -1005,7 +1005,7 @@ def main() -> None:
         default=0,
         help="Softmax class index for 'live' in LitMAS output (0=bonafide, 1=spoof)",
     )
-    parser.add_argument("--tracker-backend", choices=["deepsort", "botsort", "hungarian"], default="botsort")
+    parser.add_argument("--tracker-backend", choices=["deepsort", "botsort", "hungarian"], default="deepsort")
     parser.add_argument(
         "--track-max-missed-frames",
         type=int,
@@ -1044,9 +1044,10 @@ def main() -> None:
         help="Optional path to ReID weights for BoT-SORT appearance features (e.g. osnet_x0_25_msmt17.pt)",
     )
     parser.add_argument("--botsort-with-reid", action="store_true", help="Enable ReID features in BoT-SORT")
-    parser.add_argument("--botsort-track-high-thresh", type=float, default=0.5)
-    parser.add_argument("--botsort-track-low-thresh", type=float, default=0.1)
-    parser.add_argument("--botsort-new-track-thresh", type=float, default=0.6)
+    parser.add_argument("--botsort-track-high-thresh", type=float, default=0.10,
+                        help="High-conf detection threshold for first-pass association (lower for face pipelines)")
+    parser.add_argument("--botsort-track-low-thresh", type=float, default=0.03)
+    parser.add_argument("--botsort-new-track-thresh", type=float, default=0.10)
     parser.add_argument("--botsort-match-thresh", type=float, default=0.8)
 
     parser.add_argument(

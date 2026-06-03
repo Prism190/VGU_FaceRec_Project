@@ -282,14 +282,18 @@ data/face_db/
 
 ## Tracker: BoT-SORT vs DeepSORT
 
-| | BoT-SORT (default) | DeepSORT |
+| | BoT-SORT | DeepSORT (default) |
 |--|--|--|
 | Association | Two-stage (high-conf first, then low-conf) | Single-stage cosine + IoU |
 | Occlusion | Kalman prediction keeps identity through gaps | Drops sooner without appearance |
-| ReID | Optional (plug in `osnet_x0_25_msmt17.pt`) | Always requires appearance embedder |
-| Dependency | `boxmot>=10.0` | `deep-sort-realtime` |
+| ReID | Optional (plug in `osnet_x0_25_msmt17.pt`) | Requires appearance embedder |
+| Dependency | `boxmot>=19.0` | `deep-sort-realtime` |
+| Low-conf faces | Works with `--det-conf 0.08` (thresholds pre-tuned) | Works out of the box |
 
-Switch back to DeepSORT: `--tracker-backend deepsort`.
+DeepSORT is the default — it's been tuned for this pipeline and is proven stable.
+To use BoT-SORT: `--tracker-backend botsort`. The low-conf face thresholds
+(`track_high_thresh=0.10`, `new_track_thresh=0.10`) are pre-set in the defaults,
+matching `--det-conf 0.08` usage.
 
 ## Anti-spoofing: LitMAS vs MiniFASNetV2
 

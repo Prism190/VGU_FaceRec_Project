@@ -57,7 +57,7 @@ class TrackHistory:
 
 @dataclass
 class TrackManager:
-    backend: str = "botsort"
+    backend: str = "deepsort"
     iou_match_threshold: float = 0.3
     center_dist_match_threshold: float = 1.25
     iou_cost_weight: float = 0.75
@@ -73,9 +73,12 @@ class TrackManager:
     botsort_device: str = "cpu"
     botsort_model_weights: str | None = None
     botsort_with_reid: bool = False
-    botsort_track_high_thresh: float = 0.5
-    botsort_track_low_thresh: float = 0.1
-    botsort_new_track_thresh: float = 0.6
+    # Thresholds tuned for face pipelines that use det-conf ~0.08.
+    # boxmot defaults (0.5/0.1/0.6) assume pedestrian detectors with conf>0.5 —
+    # they silently starve face tracks when low-conf detections are used.
+    botsort_track_high_thresh: float = 0.10
+    botsort_track_low_thresh: float = 0.03
+    botsort_new_track_thresh: float = 0.10
     botsort_match_thresh: float = 0.8
     botsort_proximity_thresh: float = 0.5
     botsort_appearance_thresh: float = 0.25
@@ -178,7 +181,8 @@ class TrackManager:
                 use_reid = False
 
         try:
-            # boxmot>=19.0 API: reid_model is a pre-built object; no device/half/model_weights args
+            # boxmot>=19.0 API: reid_model is a pre-built object; no device/half/model_weights args.
+            # min_hits=1: confirm tracks immediately — face pipelines process every frame.
             self._botsort = _BoTSORT(
                 reid_model=reid_model,
                 with_reid=use_reid,
@@ -189,6 +193,7 @@ class TrackManager:
                 match_thresh=float(self.botsort_match_thresh),
                 proximity_thresh=float(self.botsort_proximity_thresh),
                 appearance_thresh=float(self.botsort_appearance_thresh),
+                min_hits=1,
             )
         except TypeError:
             # Last-resort fallback for any other boxmot variant

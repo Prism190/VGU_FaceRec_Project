@@ -48,6 +48,7 @@ def _extract_face_embeddings(
     batch_size: int,
     num_workers: int,
     normalize_embeddings: bool,
+    use_flip: bool = True,
 ) -> np.ndarray:
     dataset = _ImagePathDataset(image_paths=image_paths, transform=transform)
     loader = DataLoader(
@@ -65,6 +66,8 @@ def _extract_face_embeddings(
         images = images.to(device, non_blocking=True)
         with torch.autocast(device_type=device.type, enabled=use_amp and device.type == "cuda"):
             embeddings = model(images)
+            if use_flip:
+                embeddings = embeddings + model(torch.flip(images, dims=[3]))
         embeddings = torch.nan_to_num(embeddings, nan=0.0, posinf=0.0, neginf=0.0)
         if normalize_embeddings:
             embeddings = F.normalize(embeddings, dim=1)
@@ -218,6 +221,7 @@ def evaluate_ijb_template_1to1(
     batch_size: int = 256,
     num_workers: int = 4,
     template_pooling: str = "magface_weighted",
+    use_flip: bool = True,
 ) -> dict[str, Any]:
     ijb_root = Path(ijb_root)
     if not ijb_root.exists():
@@ -254,6 +258,7 @@ def evaluate_ijb_template_1to1(
         batch_size=batch_size,
         num_workers=num_workers,
         normalize_embeddings=(template_pooling == "mean"),
+        use_flip=use_flip,
     )
 
     template_features = _build_template_features(
