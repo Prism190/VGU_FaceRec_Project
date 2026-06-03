@@ -26,9 +26,10 @@ Raw JSON results in [`docs/benchmarks/`](docs/benchmarks/).
 | Model | IJBB AUC | IJBB TAR@1e-4 | IJBC AUC | IJBC TAR@1e-4 |
 |---|---|---|---|---|
 | teacher (iResNet-100) | 0.9922 | 93.14% | 0.9960 | 97.64% |
-| **phase1** (recommended) | **0.9912** | **87.98%** | **0.9937** | **90.65%** |
-| phase3 | 0.9917 | 84.78% | 0.9932 | 87.23% |
-| phase2 | 0.9935 | 84.52% | 0.9949 | 86.85% |
+| **phase1/latest** (best clean) | **0.9912** | **87.98%** | **0.9937** | **90.65%** |
+| phase3/swa (best occluded) | 0.9919 | 85.27% | 0.9930 | 87.77% |
+| phase3/latest | 0.9917 | 84.78% | 0.9932 | 87.23% |
+| phase2/latest | 0.9935 | 84.52% | 0.9949 | 86.85% |
 
 ### Bin Protocol (LFW / CFP-FP / AgeDB-30)
 
@@ -47,9 +48,11 @@ Raw JSON results in [`docs/benchmarks/`](docs/benchmarks/).
 ## Quick start — pipeline demo
 
 The recommended checkpoint is **phase1** (`runs/ms1m_magface_phase1_cplus_aplus_v1`).
-It achieves the best TAR@1e-4 on IJB (87.98% IJBB / 90.65% IJBC) despite simpler
-training — phase2/3 occlusion augmentation slightly degrades clean-face precision.
-Phase1 > phase3 > phase2 on strict IJB FAR.
+**Use phase1 for clean-face deployment** (best IJB: 87.98% IJBB / 90.65% IJBC).
+**Use phase3/swa for occluded-face environments** (masks, partial occlusion) — the
+occlusion curriculum (30% mask prob + Gaussian/motion blur) with SWA smoothing makes
+it more robust at the cost of ~3pp clean-face precision. See `docs/benchmarks/` for
+the full occlusion eval (clean vs masked LFW/CFP/AgeDB).
 
 ### 1) Environment
 

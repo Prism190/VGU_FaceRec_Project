@@ -74,6 +74,7 @@ def _embed(model, imgs, transform, device, mask: bool, use_flip: bool = True):
         batch = imgs[start:start + batch_size]
         tensors = []
         for img in batch:
+            img = img.convert("RGB")  # guard against grayscale bin images
             t = transform(img)
             if mask:
                 t = apply_lower_face_mask(t, mask_fill="zero")
