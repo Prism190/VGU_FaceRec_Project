@@ -1,0 +1,74 @@
+{
+  "student": {
+    "lfw": {
+      "accuracy": 0.9943333333333333,
+      "roc_auc": 0.9983298333333334,
+      "best_threshold": 0.28759765625,
+      "num_pairs": 6000,
+      "num_scores_non_finite": 0,
+      "tar_far_1e-3": 0.988,
+      "tar_far_1e-4": 0.977,
+      "tar_far_1e-5": 0.977
+    },
+    "cfp_fp": {
+      "accuracy": 0.9278571428571428,
+      "roc_auc": 0.9660842040816326,
+      "best_threshold": 0.144287109375,
+      "num_pairs": 7000,
+      "num_scores_non_finite": 0,
+      "tar_far_1e-3": 0.7428571428571429,
+      "tar_far_1e-4": 0.6417142857142857,
+      "tar_far_1e-5": 0.6417142857142857
+    },
+    "agedb30": {
+      "accuracy": 0.9515,
+      "roc_auc": 0.9815018333333334,
+      "best_threshold": 0.2034912109375,
+      "num_pairs": 6000,
+      "num_scores_non_finite": 0,
+      "tar_far_1e-3": 0.705,
+      "tar_far_1e-4": 0.637,
+      "tar_far_1e-5": 0.637
+    },
+    "aggregate": {
+      "mean_accuracy": 0.9578968253968254,
+      "mean_roc_auc": 0.9819719569160998
+    }
+  },
+  "teacher": {
+    "lfw": {
+      "accuracy": 0.9978333333333333,
+      "roc_auc": 0.9994083888888888,
+      "best_threshold": 0.34130859375,
+      "num_pairs": 6000,
+      "num_scores_non_finite": 0,
+      "tar_far_1e-3": 0.9966666666666667,
+      "tar_far_1e-4": 0.9956666666666667,
+      "tar_far_1e-5": 0.9956666666666667
+    },
+    "cfp_fp": {
+      "accuracy": 0.9627142857142857,
+      "roc_auc": 0.9752899183673469,
+      "best_threshold": 0.1973876953125,
+      "num_pairs": 7000,
+      "num_scores_non_finite": 0,
+      "tar_far_1e-3": 0.9134285714285715,
+      "tar_far_1e-4": 0.902,
+      "tar_far_1e-5": 0.902
+    },
+    "agedb30": {
+      "accuracy": 0.983,
+      "roc_auc": 0.9914585555555555,
+      "best_threshold": 0.2447509765625,
+      "num_pairs": 6000,
+      "num_scores_non_finite": 0,
+      "tar_far_1e-3": 0.9603333333333334,
+      "tar_far_1e-4": 0.9193333333333333,
+      "tar_far_1e-5": 0.9193333333333333
+    },
+    "aggregate": {
+      "mean_accuracy": 0.9811825396825397,
+      "mean_roc_auc": 0.9887189542705971
+    }
+  }
+}

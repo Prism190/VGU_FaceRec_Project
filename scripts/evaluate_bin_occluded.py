@@ -39,10 +39,14 @@ from evaluate_bin_protocol import BinPairDataset  # type: ignore
 CHECKPOINTS = [
     ("phase1/latest", "configs/train_ms1m_magface_phase1_cplus_aplus_v1.yaml",
      "runs/ms1m_magface_phase1_cplus_aplus_v1/checkpoints/latest.pt"),
-    ("phase2/latest", "configs/train_ms1m_magface_phase2_occlusion_spatial_v1.yaml",
-     "runs/ms1m_magface_phase2_occlusion_spatial_v1/checkpoints/latest.pt"),
+    ("phase1/best",   "configs/train_ms1m_magface_phase1_cplus_aplus_v1.yaml",
+     "runs/ms1m_magface_phase1_cplus_aplus_v1/checkpoints/best.pt"),
+    ("phase3/latest", "configs/train_ms1m_magface_phase3_trueasym_swa_v1.yaml",
+     "runs/ms1m_magface_phase3_trueasym_swa_v1/checkpoints/latest.pt"),
     ("phase3/swa",   "configs/train_ms1m_magface_phase3_trueasym_swa_v1.yaml",
      "runs/ms1m_magface_phase3_trueasym_swa_v1/checkpoints/swa.pt"),
+    ("phase3/best",  "configs/train_ms1m_magface_phase3_trueasym_swa_v1.yaml",
+     "runs/ms1m_magface_phase3_trueasym_swa_v1/checkpoints/best.pt"),
 ]
 
 BIN_SETS = {
