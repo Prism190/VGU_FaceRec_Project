@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 """Bin protocol evaluation under lower-face occlusion (surgical mask simulation).
 
-Applies the same apply_lower_face_mask transform used during phase2/3 training
-(zero-fill from y=55% down) to test images, then runs bin protocol verification.
+Uses the same BinPairDataset + evaluate_pair_verification infrastructure as
+evaluate_bin_protocol.py — same accuracy metric (best threshold sweep, not EER),
+same DataLoader workers, same flip-TTA.
 
-Tests occlusion robustness: phase1 (clean-only training) vs phase3 (SWA, 30%
-mask curriculum) vs phase2.
+Only difference: optionally applies apply_lower_face_mask to BOTH images before
+computing embeddings (clean) or WITH mask applied (masked).
 
 Usage:
-    ./venv/bin/python scripts/evaluate_bin_occluded.py \
-        --bin-root data/raw/casia-webface/faces_webface_112x112 \
-        --out-dir logs/eval_occluded_$(date +%Y%m%d)
+    ./venv/bin/python scripts/evaluate_bin_occluded.py
 """
 from __future__ import annotations
 
@@ -22,8 +21,7 @@ from pathlib import Path
 import numpy as np
 import torch
 import torch.nn.functional as F
-from PIL import Image
-from tqdm import tqdm
+from torch.utils.data import DataLoader
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 SRC_ROOT = PROJECT_ROOT / "src"
@@ -34,6 +32,9 @@ from fas_kd.data.transforms import apply_lower_face_mask, build_eval_transform
 from fas_kd.models.student import MobileNetV4Student
 from fas_kd.utils.config import load_yaml_config
 
+# Re-use BinPairDataset from evaluate_bin_protocol
+sys.path.insert(0, str(PROJECT_ROOT / "scripts"))
+from evaluate_bin_protocol import BinPairDataset  # type: ignore
 
 CHECKPOINTS = [
     ("phase1/latest", "configs/train_ms1m_magface_phase1_cplus_aplus_v1.yaml",
@@ -42,89 +43,74 @@ CHECKPOINTS = [
      "runs/ms1m_magface_phase2_occlusion_spatial_v1/checkpoints/latest.pt"),
     ("phase3/swa",   "configs/train_ms1m_magface_phase3_trueasym_swa_v1.yaml",
      "runs/ms1m_magface_phase3_trueasym_swa_v1/checkpoints/swa.pt"),
-    ("phase3/latest","configs/train_ms1m_magface_phase3_trueasym_swa_v1.yaml",
-     "runs/ms1m_magface_phase3_trueasym_swa_v1/checkpoints/latest.pt"),
 ]
 
+BIN_SETS = {
+    "lfw":    "lfw.bin",
+    "cfp_fp": "cfp_fp.bin",
+    "agedb_30": "agedb_30.bin",
+    "cplfw":  "cplfw.bin",
+    "calfw":  "calfw.bin",
+}
 
-def _load_bin(bin_path: Path):
-    """Read InsightFace .bin file (pickle format) → list of ((img_a, img_b), label) pairs."""
-    import pickle, io
-    with open(bin_path, "rb") as f:
-        bins, issame_list = pickle.load(f, encoding="bytes")
-    pairs, pair_labels = [], []
-    for i, issame in enumerate(issame_list):
-        def _to_pil(item):
-            if isinstance(item, np.ndarray):
-                return Image.fromarray(item).convert("RGB")
-            return Image.open(io.BytesIO(item)).convert("RGB")
-        img_a = _to_pil(bins[2 * i])
-        img_b = _to_pil(bins[2 * i + 1])
-        pairs.append((img_a, img_b))
-        pair_labels.append(1 if issame else 0)
-    return pairs, pair_labels
+
+def _best_accuracy(scores: np.ndarray, labels: np.ndarray) -> tuple[float, float]:
+    thresholds = np.arange(-1.0, 1.0 + 0.001, 0.001)
+    best_acc, best_thr = 0.0, 0.0
+    for thr in thresholds:
+        preds = (scores >= thr).astype(np.int32)
+        acc = float((preds == labels).mean())
+        if acc > best_acc:
+            best_acc = acc
+            best_thr = float(thr)
+    return best_acc, best_thr
+
+
+class _MaskedBinDataset(BinPairDataset):
+    """BinPairDataset with optional lower-face mask applied to both images."""
+    def __init__(self, bin_path, transform, apply_mask: bool = False):
+        super().__init__(bin_path=bin_path, transform=transform)
+        self.apply_mask = apply_mask
+
+    def __getitem__(self, index):
+        item = super().__getitem__(index)
+        if self.apply_mask:
+            item["image_a"] = apply_lower_face_mask(item["image_a"], mask_fill="zero")
+            item["image_b"] = apply_lower_face_mask(item["image_b"], mask_fill="zero")
+        return item
 
 
 @torch.no_grad()
-def _embed(model, imgs, transform, device, mask: bool, use_flip: bool = True):
-    """Embed a list of PIL images, optionally applying lower-face mask."""
-    embs = []
-    batch_size = 256
-    for start in range(0, len(imgs), batch_size):
-        batch = imgs[start:start + batch_size]
-        tensors = []
-        for img in batch:
-            img = img.convert("RGB")  # guard against grayscale bin images
-            t = transform(img)
-            if mask:
-                t = apply_lower_face_mask(t, mask_fill="zero")
-            tensors.append(t)
-        x = torch.stack(tensors).to(device)
-        e = model(x)
-        if use_flip:
-            e = e + model(torch.flip(x, dims=[3]))
-        embs.append(e.cpu())
-    return torch.cat(embs, dim=0)
-
-
-def _accuracy_tar_far(scores, labels, target_fars=(0.001, 0.0001)):
-    labels = np.asarray(labels)
-    scores = np.asarray(scores)
-    pos = scores[labels == 1]
-    neg = scores[labels == 0]
-    # EER threshold
-    from sklearn.metrics import roc_auc_score, roc_curve
-    auc = float(roc_auc_score(labels, scores))
-    fpr, tpr, thrs = roc_curve(labels, scores, pos_label=1)
-    eer_idx = int(np.argmin(np.abs(fpr - (1 - tpr))))
-    eer_thr = float(thrs[eer_idx])
-    acc = float(np.mean((scores >= eer_thr) == (labels == 1)))
-    tar_far = {}
-    for far in target_fars:
-        idxs = np.where(fpr <= far)[0]
-        tar_far[f"tar_far_{far:g}"] = float(tpr[idxs[-1]]) if idxs.size else 0.0
-    return {"accuracy": acc, "roc_auc": auc, "eer_threshold": eer_thr, **tar_far}
-
-
-def _eval_one(model, pairs, pair_labels, transform, device, mask: bool):
-    left_imgs  = [p[0] for p in pairs]
-    right_imgs = [p[1] for p in pairs]
-    e1 = _embed(model, left_imgs,  transform, device, mask=mask)
-    e2 = _embed(model, right_imgs, transform, device, mask=mask)
-    e1 = F.normalize(e1, dim=1)
-    e2 = F.normalize(e2, dim=1)
-    scores = (e1 * e2).sum(dim=1).numpy()
-    return _accuracy_tar_far(scores, pair_labels)
+def _run_bin(model, bin_path, transform, device, apply_mask, num_workers=4, batch_size=256):
+    ds = _MaskedBinDataset(bin_path=bin_path, transform=transform, apply_mask=apply_mask)
+    dl = DataLoader(ds, batch_size=batch_size, shuffle=False,
+                    num_workers=num_workers, pin_memory=True, drop_last=False)
+    model.eval()
+    scores_list, labels_list = [], []
+    for batch in dl:
+        a = batch["image_a"].to(device, non_blocking=True)
+        b = batch["image_b"].to(device, non_blocking=True)
+        y = batch["is_same"].cpu().numpy().astype(np.int32)
+        with torch.autocast(device_type=device.type, enabled=device.type == "cuda"):
+            ea = model(a) + model(torch.flip(a, dims=[3]))
+            eb = model(b) + model(torch.flip(b, dims=[3]))
+        ea = F.normalize(torch.nan_to_num(ea, nan=0.0), dim=1)
+        eb = F.normalize(torch.nan_to_num(eb, nan=0.0), dim=1)
+        s = (ea * eb).sum(dim=1).cpu().numpy()
+        scores_list.append(s)
+        labels_list.append(y)
+    scores = np.concatenate(scores_list)
+    labels = np.concatenate(labels_list)
+    acc, _ = _best_accuracy(scores, labels)
+    return float(acc)
 
 
 def main():
     parser = argparse.ArgumentParser()
-    parser.add_argument("--bin-root",
-                        default="data/raw/casia-webface/faces_webface_112x112")
-    parser.add_argument("--datasets", nargs="+",
-                        default=["lfw", "cfp_fp", "agedb_30", "cplfw", "calfw"])
+    parser.add_argument("--bin-root", default="data/raw/casia-webface/faces_webface_112x112")
     parser.add_argument("--out-dir", default="logs/eval_occluded")
     parser.add_argument("--device", default="cuda")
+    parser.add_argument("--num-workers", type=int, default=4)
     args = parser.parse_args()
 
     bin_root = Path(args.bin_root)
@@ -138,22 +124,18 @@ def main():
     device = torch.device(args.device if torch.cuda.is_available() else "cpu")
 
     all_results = {}
-
     for label, cfg_path, ckpt_path in CHECKPOINTS:
         cfg_full = (PROJECT_ROOT / cfg_path).resolve()
         ckpt_full = (PROJECT_ROOT / ckpt_path).resolve()
-        if not cfg_full.exists():
-            print(f"[skip] {label}: config not found")
-            continue
-        if not ckpt_full.exists():
-            print(f"[skip] {label}: checkpoint not found")
+        if not cfg_full.exists() or not ckpt_full.exists():
+            print(f"[skip] {label}")
             continue
 
         cfg = load_yaml_config(str(cfg_full))
         sc = cfg["student"]
         model = MobileNetV4Student(
             backbone_name=sc["backbone_name"], embedding_dim=512, pretrained=False,
-            input_size=112, projection_activation=str(sc.get("projection_activation","none")),
+            input_size=112, projection_activation=str(sc.get("projection_activation", "none")),
             spatial_out_channels=int(sc.get("spatial_out_channels", 0)),
         )
         ckpt = torch.load(str(ckpt_full), map_location="cpu")
@@ -161,50 +143,39 @@ def main():
         model.to(device).eval()
         transform = build_eval_transform(cfg["data"])
 
-        print(f"\n=== {label} ===")
-        results = {"clean": {}, "masked": {}}
-
-        for ds_name in args.datasets:
-            bin_path = bin_root / f"{ds_name}.bin"
+        print(f"\n=== {label} ===", flush=True)
+        results = {}
+        for ds_name, fname in BIN_SETS.items():
+            bin_path = bin_root / fname
             if not bin_path.exists():
-                print(f"  [skip] {ds_name}: not found")
+                print(f"  [skip] {ds_name}", flush=True)
                 continue
-
-            pairs, pair_labels = _load_bin(bin_path)
-            print(f"  {ds_name} ({len(pairs)} pairs) ...", end=" ", flush=True)
-
-            clean = _eval_one(model, pairs, pair_labels, transform, device, mask=False)
-            masked = _eval_one(model, pairs, pair_labels, transform, device, mask=True)
-
-            drop = clean["accuracy"] - masked["accuracy"]
-            print(f"clean={clean['accuracy']:.4f}  masked={masked['accuracy']:.4f}  drop={drop:+.4f}")
-
-            results["clean"][ds_name] = clean
-            results["masked"][ds_name] = masked
+            clean_acc = _run_bin(model, bin_path, transform, device,
+                                  apply_mask=False, num_workers=args.num_workers)
+            masked_acc = _run_bin(model, bin_path, transform, device,
+                                   apply_mask=True, num_workers=args.num_workers)
+            drop = clean_acc - masked_acc
+            print(f"  {ds_name:<10} clean={clean_acc:.4f}  masked={masked_acc:.4f}  drop={drop:+.4f}", flush=True)
+            results[ds_name] = {"clean": clean_acc, "masked": masked_acc, "drop": drop}
 
         all_results[label] = results
+        (out_dir / f"{label.replace('/','_')}.json").write_text(json.dumps(results, indent=2))
         del model
         if device.type == "cuda":
             torch.cuda.empty_cache()
 
-    (out_dir / "results.json").write_text(json.dumps(all_results, indent=2))
-
     # Summary table
-    print("\n" + "=" * 90)
-    print(f"OCCLUSION ROBUSTNESS — lower-face mask (zero-fill, y≥55%)")
-    print(f"{'Model':<16} {'Dataset':<10} {'Clean':>8} {'Masked':>8} {'Drop':>8} {'TAR@1e-3 clean':>16} {'TAR@1e-3 mask':>15}")
-    print("-" * 90)
+    print("\n" + "=" * 75, flush=True)
+    print(f"OCCLUSION ROBUSTNESS — lower-face mask, zero-fill y≥55% (training mask)", flush=True)
+    print(f"{'Model':<14} {'Dataset':<11} {'Clean':>8} {'Masked':>8} {'Drop':>8}", flush=True)
+    print("-" * 75, flush=True)
     for label, res in all_results.items():
-        for ds, cm in res["clean"].items():
-            mm = res["masked"].get(ds, {})
-            if not mm:
-                continue
-            drop = cm["accuracy"] - mm["accuracy"]
-            t3c = cm.get("tar_far_0.001", 0)
-            t3m = mm.get("tar_far_0.001", 0)
-            print(f"{label:<16} {ds:<10} {cm['accuracy']:>8.4f} {mm['accuracy']:>8.4f} {drop:>+8.4f} {t3c:>16.4f} {t3m:>15.4f}")
-    print("=" * 90)
-    print(f"\nResults saved to {out_dir}/results.json")
+        for ds, m in res.items():
+            print(f"{label:<14} {ds:<11} {m['clean']:>8.4f} {m['masked']:>8.4f} {m['drop']:>+8.4f}", flush=True)
+    print("=" * 75, flush=True)
+
+    (out_dir / "summary.json").write_text(json.dumps(all_results, indent=2))
+    print(f"\nResults in {out_dir}", flush=True)
 
 
 if __name__ == "__main__":
