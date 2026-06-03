@@ -192,7 +192,7 @@ fi
 # Student inference checkpoints (GitHub Releases)
 # ---------------------------
 RELEASE_BASE="https://github.com/Prism190/AI_FaceRec_VGU_2026/releases/download/v1.0-vgu2026"
-STUDENT_ROOT="${ROOT}/runs"
+STUDENT_ROOT="${PROJECT_ROOT}/runs"
 
 download_student() {
     local PHASE="$1"

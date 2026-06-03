@@ -29,6 +29,11 @@ print(cfg["experiment"]["output_root"])
 PY
 )"
 
+# Resolve relative output_root against PROJECT_ROOT so mkdir works from any CWD
+if [[ "${OUTPUT_ROOT}" != /* ]]; then
+    OUTPUT_ROOT="${PROJECT_ROOT}/${OUTPUT_ROOT}"
+fi
+
 CHECKPOINT_DIR="${OUTPUT_ROOT}/checkpoints"
 LOG_DIR="${OUTPUT_ROOT}/logs"
 

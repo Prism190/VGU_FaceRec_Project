@@ -1,6 +1,6 @@
 experiment:
   name: mobilenetv4_magface_kd_baseline
-  output_root: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4
+  output_root: .
   seed: 3407
 
 system:
@@ -20,24 +20,24 @@ data:
   mask_prob: 0.3
   mask_fill: zero
   use_clahe: false
-  train_manifest: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/manifests/casia_train.csv
+  train_manifest: data/manifests/casia_train.csv
   val_sets:
     - name: lfw
-      pairs_csv: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/manifests/lfw_pairs.csv
+      pairs_csv: data/manifests/lfw_pairs.csv
     - name: cfp_fp
-      pairs_csv: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/manifests/cfp_fp_pairs.csv
+      pairs_csv: data/manifests/cfp_fp_pairs.csv
     - name: agedb30
-      pairs_csv: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/manifests/agedb30_pairs.csv
+      pairs_csv: data/manifests/agedb30_pairs.csv
   ijb:
-    protocol_csv: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/manifests/ijb_1to1_pairs.csv
-    ijbb_root: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/raw/ijb/ijb/IJBB
-    ijbc_root: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/raw/ijb/ijb/IJBC
+    protocol_csv: data/manifests/ijb_1to1_pairs.csv
+    ijbb_root: data/raw/ijb/ijb/IJBB
+    ijbc_root: data/raw/ijb/ijb/IJBC
 
 teacher:
   source: magface
   arch: iresnet18
   model_name: ""
-  checkpoint: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/checkpoints/pretrained/magface_iresnet18_casia.pth
+  checkpoint: checkpoints/pretrained/magface_iresnet18_casia.pth
   embedding_dim: 512
   input_mode: identity
   swap_rb: false

@@ -1,6 +1,6 @@
 experiment:
   name: mobilenetv4_magface_kd_ms1m_full_v1_40e
-  output_root: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/runs/ms1m_magface_full_v1_40e
+  output_root: runs/ms1m_magface_full_v1_40e
   seed: 3407
 
 system:
@@ -30,24 +30,24 @@ data:
   mask_fill: zero
   use_clahe: false
   # Swap this to your MS1M manifest after loader is finalized.
-  train_manifest: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/manifests/ms1m_clean_train.csv
+  train_manifest: data/manifests/ms1m_clean_train.csv
   val_sets:
     - name: lfw
-      pairs_csv: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/manifests/lfw_pairs.csv
+      pairs_csv: data/manifests/lfw_pairs.csv
     - name: cfp_fp
-      pairs_csv: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/manifests/cfp_fp_pairs.csv
+      pairs_csv: data/manifests/cfp_fp_pairs.csv
     - name: agedb30
-      pairs_csv: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/manifests/agedb30_pairs.csv
+      pairs_csv: data/manifests/agedb30_pairs.csv
   ijb:
-    protocol_csv: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/manifests/ijb_1to1_pairs.csv
-    ijbb_root: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/raw/ijb/ijb/IJBB
-    ijbc_root: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/raw/ijb/ijb/IJBC
+    protocol_csv: data/manifests/ijb_1to1_pairs.csv
+    ijbb_root: data/raw/ijb/ijb/IJBB
+    ijbc_root: data/raw/ijb/ijb/IJBC
 
 teacher:
   source: magface
   arch: iresnet100
   model_name: ""
-  checkpoint: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/checkpoints/pretrained/magface_iresnet100_ms1mv2.pth
+  checkpoint: checkpoints/pretrained/magface_iresnet100_ms1mv2.pth
   embedding_dim: 512
   input_mode: from_minus_one_to_zero_one
   swap_rb: false

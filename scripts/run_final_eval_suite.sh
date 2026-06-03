@@ -139,10 +139,10 @@ copy_ijb "$ROOT/logs/ijb_iff_phase3swa_ijbc.json"                    "$IJB_OUT/p
 echo ""
 echo "=== BIN PROTOCOL SUMMARY ==="
 "$PY" - <<'PY'
-import json, glob, os
+import json, os
 from pathlib import Path
 
-import os; out = Path(os.environ["BIN_OUT"])
+out = Path(os.environ["BIN_OUT"])
 files = sorted(out.glob("*.json"))
 order = ["phase1_latest", "phase1_best", "phase3_latest", "phase3_swa", "phase3_best"]
 print(f"{'checkpoint':<18} {'LFW':>8} {'CFP-FP':>8} {'AgeDB':>8} {'mean':>8}")
@@ -168,10 +168,10 @@ PY
 echo ""
 echo "=== IJB SUMMARY (TAR@1e-4) ==="
 "$PY" - <<'PY'
-import json
+import json, os
 from pathlib import Path
 
-import os; ijb_dir = Path(os.environ["IJB_OUT"])
+ijb_dir = Path(os.environ["IJB_OUT"])
 print(f"{'checkpoint':<22} {'IJBB TAR@1e-4':>14} {'IJBC TAR@1e-4':>14}")
 print("-" * 52)
 order = ["teacher", "phase1_latest", "phase1_best", "phase2_latest",

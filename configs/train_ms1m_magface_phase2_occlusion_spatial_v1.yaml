@@ -1,6 +1,6 @@
 experiment:
   name: mobilenetv4_medium_magface_kd_ms1m_phase2_occlusion_spatial_v1
-  output_root: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/runs/ms1m_magface_phase2_occlusion_spatial_v1
+  output_root: runs/ms1m_magface_phase2_occlusion_spatial_v1
   seed: 3407
 
 system:
@@ -31,20 +31,20 @@ data:
   mask_prob: 0.30
   mask_fill: zero
   use_clahe: false
-  train_manifest: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/manifests/ms1m_clean_train.csv
+  train_manifest: data/manifests/ms1m_clean_train.csv
   val_sets:
     - name: ms1m_proxy
-      pairs_csv: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/manifests/ms1m_proxy_pairs_v1.csv
+      pairs_csv: data/manifests/ms1m_proxy_pairs_v1.csv
   ijb:
-    protocol_csv: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/manifests/ijb_1to1_pairs.csv
-    ijbb_root: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/raw/ijb/ijb/IJBB
-    ijbc_root: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/data/raw/ijb/ijb/IJBC
+    protocol_csv: data/manifests/ijb_1to1_pairs.csv
+    ijbb_root: data/raw/ijb/ijb/IJBB
+    ijbc_root: data/raw/ijb/ijb/IJBC
 
 teacher:
   source: magface
   arch: iresnet100
   model_name: ""
-  checkpoint: /home/phongtruong/data_pool/phongtruong/fas-kd-mobilenetv4/checkpoints/pretrained/magface_iresnet100_ms1mv2.pth
+  checkpoint: checkpoints/pretrained/magface_iresnet100_ms1mv2.pth
   embedding_dim: 512
   input_mode: from_minus_one_to_zero_one
   swap_rb: false
