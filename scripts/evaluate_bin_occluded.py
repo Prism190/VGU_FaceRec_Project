@@ -30,6 +30,7 @@ if str(SRC_ROOT) not in sys.path:
 
 from fas_kd.data.transforms import apply_lower_face_mask, build_eval_transform
 from fas_kd.models.student import MobileNetV4Student
+from fas_kd.models.teacher import build_frozen_teacher
 from fas_kd.utils.config import load_yaml_config
 
 # Re-use BinPairDataset from evaluate_bin_protocol
@@ -186,6 +187,39 @@ def main():
 
         all_results[label] = results
         (out_dir / f"{label.replace('/','_')}.json").write_text(json.dumps(results, indent=2))
+        del model
+        if device.type == "cuda":
+            torch.cuda.empty_cache()
+
+    # Teacher eval (uses config from phase3 which contains teacher section)
+    teacher_cfg_path = PROJECT_ROOT / "configs/train_ms1m_magface_phase3_trueasym_swa_v1.yaml"
+    if teacher_cfg_path.exists():
+        print(f"\n=== teacher ===", flush=True)
+        cfg = load_yaml_config(str(teacher_cfg_path))
+        model = build_frozen_teacher(cfg["teacher"]).to(device)
+        transform = build_eval_transform(cfg["data"])
+        results = {}
+        for ds_name, fname in BIN_SETS.items():
+            bin_path = bin_root / fname
+            if not bin_path.exists():
+                print(f"  [skip] {ds_name}", flush=True)
+                continue
+            clean  = _run_bin(model, bin_path, transform, device,
+                              apply_mask=False, num_workers=args.num_workers)
+            masked = _run_bin(model, bin_path, transform, device,
+                              apply_mask=True,  num_workers=args.num_workers)
+            drop_acc = clean["accuracy"] - masked["accuracy"]
+            drop_t3  = clean["tar_far_1e-3"] - masked["tar_far_1e-3"]
+            print(f"  {ds_name:<10} clean={clean['accuracy']:.4f}  masked={masked['accuracy']:.4f}"
+                  f"  drop={drop_acc:+.4f} | TAR@1e-3 clean={clean['tar_far_1e-3']:.4f}"
+                  f"  masked={masked['tar_far_1e-3']:.4f}  drop={drop_t3:+.4f}", flush=True)
+            results[ds_name] = {
+                "clean_acc": clean["accuracy"],  "masked_acc": masked["accuracy"],  "drop_acc": drop_acc,
+                "clean_tar_1e3": clean["tar_far_1e-3"], "masked_tar_1e3": masked["tar_far_1e-3"], "drop_tar_1e3": drop_t3,
+                "clean_tar_1e4": clean["tar_far_1e-4"], "masked_tar_1e4": masked["tar_far_1e-4"],
+            }
+        all_results["teacher"] = results
+        (out_dir / "teacher.json").write_text(json.dumps(results, indent=2))
         del model
         if device.type == "cuda":
             torch.cuda.empty_cache()
