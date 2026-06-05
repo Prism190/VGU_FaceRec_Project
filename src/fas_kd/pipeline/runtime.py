@@ -20,9 +20,14 @@ class RuntimePipeline:
     quality_gate: MagnitudeQualityGate
     embed_fn: Callable[[np.ndarray], np.ndarray]
     liveness_interval_frames: int = 0
+    # Require this many liveness evaluations (spaced by liveness_interval_frames) to agree
+    # before marking a track as live. Prevents a single spoofed frame from caching is_live=True
+    # for the entire window. Set to 1 to restore the original single-evaluation behaviour.
+    liveness_confirm_frames: int = 3
     track_manager: TrackManager = field(default_factory=TrackManager)
     track_buffers: dict[int, TrackEmbeddingBuffer] = field(default_factory=dict)
-    _liveness_cache: dict[int, tuple[int, bool, float]] = field(default_factory=dict)
+    # Cache stores (last_eval_frame_idx, [recent_liveness_scores]) for rolling confirmation.
+    _liveness_cache: dict[int, tuple[int, list[float]]] = field(default_factory=dict)
 
     def process_frame(
         self,
@@ -72,13 +77,20 @@ class RuntimePipeline:
 
             face_rgb = face_rgbs[det_idx]
             interval = max(0, int(self.liveness_interval_frames))
+            confirm = max(1, int(self.liveness_confirm_frames))
             cached = self._liveness_cache.get(track.track_id)
             if interval > 0 and cached is not None and (frame_idx - int(cached[0])) < interval:
-                is_live = bool(cached[1])
-                liveness_score = float(cached[2])
+                # Reuse cached rolling scores without re-evaluating.
+                scores = cached[1]
             else:
-                is_live, liveness_score = self.liveness_gate.is_live(face_rgb)
-                self._liveness_cache[track.track_id] = (int(frame_idx), bool(is_live), float(liveness_score))
+                # Time to re-evaluate: get raw score and append to rolling window.
+                _, raw_score = self.liveness_gate.is_live(face_rgb)
+                prev_scores = cached[1] if cached is not None else []
+                scores = (prev_scores + [raw_score])[-confirm:]
+                self._liveness_cache[track.track_id] = (int(frame_idx), scores)
+            mean_score = sum(scores) / len(scores) if scores else 0.0
+            is_live = (len(scores) >= confirm) and (mean_score >= self.liveness_gate.live_threshold)
+            liveness_score = mean_score
 
             emb = embeddings[det_idx]
             quality_pass, magnitude = self.quality_gate.evaluate(emb)

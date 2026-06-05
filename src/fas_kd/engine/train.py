@@ -425,16 +425,17 @@ def _train_one_epoch(
         else:
             raise ValueError(f"Unsupported batch format: {type(batch)}")
 
-        masked = _apply_training_augmentations_batch(
-            clear=clear,
-            mask_prob=mask_prob,
-            mask_fill=mask_fill,
-            gaussian_blur_prob=gaussian_blur_prob,
-            gaussian_sigma=gaussian_sigma,
-            gaussian_kernel_range=gaussian_kernel_range,
-            motion_blur_prob=motion_blur_prob,
-            motion_kernel_range=motion_kernel_range,
-        )
+        with torch.no_grad():
+            masked = _apply_training_augmentations_batch(
+                clear=clear,
+                mask_prob=mask_prob,
+                mask_fill=mask_fill,
+                gaussian_blur_prob=gaussian_blur_prob,
+                gaussian_sigma=gaussian_sigma,
+                gaussian_kernel_range=gaussian_kernel_range,
+                motion_blur_prob=motion_blur_prob,
+                motion_kernel_range=motion_kernel_range,
+            )
 
         optimizer.zero_grad(set_to_none=True)
 
@@ -917,7 +918,10 @@ def run_training(config: dict[str, Any]) -> None:
                 gaussian_kernel_range=tuple(aug_schedule["gaussian_kernel_range"]),
                 motion_blur_prob=float(aug_schedule["motion_blur_prob"]),
                 motion_kernel_range=tuple(aug_schedule["motion_kernel_range"]),
-                use_spatial_kd=use_spatial_kd,
+                # Spatial KD is contradictory when masking is active: student sees a black
+                # square on the lower face but spatial MSE forces it to match teacher's clean
+                # feature map in that region. Disable spatial KD for any epoch with mask_prob>0.
+                use_spatial_kd=use_spatial_kd and (active_mask_prob == 0.0),
             )
 
             scheduler.step()

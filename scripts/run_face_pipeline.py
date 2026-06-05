@@ -4,10 +4,12 @@ from __future__ import annotations
 import argparse
 import json
 import os
+import queue as _queue
 import re
 import shutil
 import subprocess
 import sys
+import threading
 import time
 from collections import defaultdict
 from pathlib import Path
@@ -924,6 +926,16 @@ def _synthetic_stream(max_frames: int) -> Iterable[tuple[int, np.ndarray, list[F
         yield frame_idx, frame, detections
 
 
+def _is_live_source(source: str) -> bool:
+    """Return True for sources that produce frames in real time (camera, RTSP)."""
+    return (
+        source.isdigit()
+        or source.lower().startswith("rtsp://")
+        or source.lower().startswith("rtsps://")
+        or source.lower().startswith("rtmp://")
+    )
+
+
 def _video_stream(
     source: str,
     detector: YOLO11FaceDetector,
@@ -931,21 +943,69 @@ def _video_stream(
     *,
     loop_source: bool,
 ):
-    source_is_camera = source.isdigit()
-    if source_is_camera:
-        cap = cv2.VideoCapture(int(source))
-    else:
-        cap = cv2.VideoCapture(source)
+    source_is_live = _is_live_source(source)
 
+    if source_is_live:
+        # Live sources: background grab thread with a bounded queue so the main pipeline
+        # always gets the most recent frame and never processes stale buffered frames.
+        # Without this, cv2.VideoCapture accumulates frames while the pipeline is busy,
+        # causing latency to grow unboundedly on 30fps streams with <30fps processing.
+        _QUEUE_SIZE = 2
+        frame_q: _queue.Queue = _queue.Queue(maxsize=_QUEUE_SIZE)
+        stop_evt = threading.Event()
+
+        def _grab_loop() -> None:
+            cap_src = int(source) if source.isdigit() else source
+            cap = cv2.VideoCapture(cap_src)
+            if not cap.isOpened():
+                frame_q.put(None)
+                return
+            try:
+                while not stop_evt.is_set():
+                    ok, frame = cap.read()
+                    if not ok:
+                        break
+                    if frame_q.full():
+                        try:
+                            frame_q.get_nowait()  # drop stale frame
+                        except _queue.Empty:
+                            pass
+                    frame_q.put(frame)
+            finally:
+                cap.release()
+                frame_q.put(None)  # sentinel
+
+        grab_thread = threading.Thread(target=_grab_loop, daemon=True)
+        grab_thread.start()
+        try:
+            frame_idx = 0
+            while True:
+                try:
+                    frame = frame_q.get(timeout=5.0)
+                except _queue.Empty:
+                    break  # camera stalled
+                if frame is None:
+                    break
+                detections = detector.detect(frame)
+                yield frame_idx, frame, detections
+                frame_idx += 1
+                if max_frames > 0 and frame_idx >= max_frames:
+                    break
+        finally:
+            stop_evt.set()
+            grab_thread.join(timeout=2.0)
+        return
+
+    # File source: simple synchronous read (no real-time constraint).
+    cap = cv2.VideoCapture(source)
     if not cap.isOpened():
         raise RuntimeError(f"Could not open source: {source}")
-
     try:
         frame_idx = 0
         while True:
             ok, frame = cap.read()
             if not ok:
-                if bool(loop_source) and not source_is_camera and (max_frames <= 0 or frame_idx < max_frames):
+                if bool(loop_source) and (max_frames <= 0 or frame_idx < max_frames):
                     seek_ok = bool(cap.set(cv2.CAP_PROP_POS_FRAMES, 0))
                     if not seek_ok:
                         cap.release()

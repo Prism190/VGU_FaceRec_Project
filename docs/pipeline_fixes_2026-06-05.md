@@ -159,6 +159,99 @@ scripts/run_face_pipeline.py — _draw_ghost_track(), ghost-box draw loop in mai
 
 ---
 
+---
+
+## Liveness Cache Free-Pass Exploit (#4)
+
+**Bug:** A single `is_live=True` evaluation was cached for `liveness_interval_frames` frames.
+Any spoof that passed the liveness gate once (e.g., briefly showing a real face, then swapping
+to a photo) received unlimited is_live=True for the entire window with no further checking.
+
+**Fix:** Changed `_liveness_cache` from a single-result store to a rolling score buffer.
+Added `liveness_confirm_frames: int = 3` to `RuntimePipeline`. On each evaluation the new
+score is appended to the per-track buffer (capped to the last N scores). `is_live` is only
+`True` when the buffer has at least `confirm_frames` entries AND their mean exceeds
+`liveness_gate.live_threshold`. A single high score no longer bypasses the gate.
+
+Note: with `liveness_confirm_frames=3` and `liveness_interval_frames=15`, a track must be
+observed to be live three separate times (frames 0, 15, 30) before being considered confirmed
+live. This intentionally delays the first confirmed embedding push by ~30 frames. For
+`liveness_interval_frames=0` (per-frame evaluation), confirmation happens after 3 frames.
+Set `liveness_confirm_frames=1` to restore the original single-evaluation behaviour.
+
+```
+src/fas_kd/pipeline/runtime.py — liveness_confirm_frames field, rolling score cache
+```
+
+---
+
+## RTSP / Camera Frame Buffer (#8)
+
+**Bug:** `_video_stream()` used synchronous `cv2.VideoCapture.read()`. At 30fps live streams
+with a pipeline throughput of ~10fps, `VideoCapture` internally buffers ~20 unread frames.
+The pipeline processes stale frames with increasing latency, and Kalman filters in
+DeepSORT/BoT-SORT assume consistent inter-frame dt — stale frames violate this assumption.
+
+**Fix:** For live sources (camera index, `rtsp://`, `rtsps://`, `rtmp://`), `_video_stream()`
+now spawns a background grab thread that writes to a bounded 2-slot queue. When the queue is
+full, the oldest frame is dropped before inserting the new one. The main pipeline always
+consumes the freshest available frame. File sources use the original synchronous path
+unchanged.
+
+```
+scripts/run_face_pipeline.py — _is_live_source(), threaded path in _video_stream()
+```
+
+---
+
+## Autograd Graph Through Augmentations (#9)
+
+**Bug:** `_apply_training_augmentations_batch()` was called outside `torch.no_grad()`. PyTorch
+traced autograd graphs through `F.conv2d` (blur kernels), `torch.where` (mask), and
+`torch.exp` (Gaussian kernel generation) on every training step. These graphs were never
+used during `backward()` but still consumed VRAM and traversal time.
+
+**Fix:** Wrapped the call in `with torch.no_grad():`.
+
+**Measured speedup** on a single A-series GPU, batch=256, 80 iterations:
+```
+With autograd (old):    79.18 ms/batch
+Without autograd (fix): 38.02 ms/batch
+Speedup: 2.08×  |  Saved: 41.15 ms/batch
+Estimated: ~15 min saved per full MS1M epoch (~22,000 steps)
+```
+
+```
+src/fas_kd/engine/train.py — _train_one_epoch(), augmentation call wrapped in no_grad
+```
+
+---
+
+## Spatial KD + Masking Contradiction (#11)
+
+**Bug:** When spatial KD was enabled (`use_spatial_kd=True`) and the occlusion curriculum
+was active (`mask_prob > 0`), the student received a masked image (lower 45% black) while
+the spatial MSE loss forced its intermediate feature map to match the teacher's feature map
+computed on a clean image — including the masked region. The student has zero information
+about the occluded area but is penalised for not reconstructing it. This is why Phase 2
+training peaked at epoch 9: contradictory gradients stalled convergence.
+
+**Fix:** At the `_train_one_epoch` call site, `use_spatial_kd` is gated on `active_mask_prob`:
+
+```python
+use_spatial_kd=use_spatial_kd and (active_mask_prob == 0.0),
+```
+
+Spatial KD operates freely during clean-training epochs (mask_prob=0); it is disabled
+automatically as soon as the occlusion curriculum introduces any masking. This prevents the
+contradiction without any loss of clean-phase feature alignment.
+
+```
+src/fas_kd/engine/train.py — run_training(), use_spatial_kd gated on active_mask_prob
+```
+
+---
+
 ## Summary Table
 
 | ID | Severity | Component | Description | Fix |
@@ -168,5 +261,9 @@ scripts/run_face_pipeline.py — _draw_ghost_track(), ghost-box draw loop in mai
 | H2 | High | runtime.py | `TrackEmbeddingBuffer` never pruned for dead tracks → OOM leak | Dict comprehension prune alongside liveness_cache |
 | H3 | High | detection.py / preprocess.py | Synthetic bbox-derived landmarks fed to affine aligner → mangled crops pass quality gate | `landmarks_synthetic` flag, `crop_center()` fallback |
 | M3 | Medium | runtime.py | Secondary greedy IoU loop overrides tracker's optimal Hungarian/DeepSORT assignment | Removed loop; use `matched_det_idx` from tracker |
+| #4 | Medium | runtime.py | Single liveness pass caches is_live=True for entire window → spoof free-pass | Rolling score buffer, require N confirmations |
+| #8 | Medium | run_face_pipeline.py | Synchronous VideoCapture buffers stale frames on live streams; dt inconsistency | Background grab thread with bounded 2-slot queue |
+| #9 | Medium | engine/train.py | Autograd graph built through augmentation kernels on every step; ~80ms overhead | Wrapped in `torch.no_grad()` → 2× faster aug pass |
+| #11 | Medium | engine/train.py | Spatial KD active during masked training → contradictory gradients (root cause of Phase 2 failure) | Gate `use_spatial_kd` on `mask_prob == 0` |
 | — | Config | run_demo_uhd.sh | Stale gallery NPZ + names JSON conflict with face_db → duplicate/wrong names | Removed both; face_db is sole identity source |
 | — | UX | run_face_pipeline.py | Label vanishes when face briefly occluded (DeepSORT coasting, no observation) | Ghost-box draw pass, capped at 10 missed frames |
