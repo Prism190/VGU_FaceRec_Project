@@ -114,6 +114,16 @@ video loops forever, and you stop manually with Ctrl+C.
 This mode auto-registers newly discovered strangers using the first/best few
 embeddings per new stranger track.
 
+> **⚠️ Production warning — `--det-conf 0.08`:** This threshold is set very low for high-recall
+> labeling work. At 8% confidence, YOLO fires on reflections, partial occlusions, background
+> faces in photos, and motion blur artefacts. Every false positive at this threshold passes
+> through the full pipeline (alignment, embedding, liveness check, FAISS search) before the
+> quality gate rejects it. On a live 30fps camera this can multiply CPU/GPU load by 3–5×
+> compared to `--det-conf 0.25`. Use `0.08` for offline labeling runs only.
+> For live/deployment use, set `--det-conf 0.25` (or higher) and rely on
+> `--det-rescue-conf 0.08` to recover missed faces only when the primary pass finds fewer than
+> `--det-rescue-min-primary` detections.
+
 ```bash
 ./venv/bin/python scripts/run_face_pipeline.py \
   --config configs/train_ms1m_magface_phase1_cplus_aplus_v1.yaml \

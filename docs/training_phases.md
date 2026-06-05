@@ -89,7 +89,9 @@ Epochs 20–39:  mask_prob=0.10 introduced
 
   Gaussian blur σ ramps 1.0 → 2.8 (larger kernels than phase3). Motion blur kernel ramps 7 → 17px.
 
-**Why phase 2 is weaker than expected:** the occlusion curriculum was introduced without SWA, and the LR schedule is inherited unchanged from phase 1. The model overtrained on the mask augmentation in later epochs. Phase 2/best (epoch 9) emerged extremely early, which is a sign the model peaked before the occlusion curriculum had a chance to stabilise. IJBB 84.52% is the weakest of all three phases.
+**Why phase 2 is weaker than expected:** the root cause is the spatial KD + masking contradiction (bug #11). Spatial MSE was computed between the student's intermediate feature map and the teacher's clean feature map even when the student's lower face was masked. The student has zero information about the masked region but is penalised for not reconstructing it — contradictory gradients that stalled convergence. This is why `best.pt` appeared at epoch 9, before the occlusion curriculum ramped up enough to cause significant masking. The LR schedule (inherited unchanged from phase 1) and lack of SWA contributed to the weak late-epoch performance, but the gradient contradiction is the primary cause. IJBB 84.52% is the weakest of all three phases.
+
+This was fixed in the codebase (see `engine/train.py`, `use_spatial_kd` gated on `active_mask_prob == 0.0`). Rerunning phase 2 with the fix is expected to recover several points on IJB.
 
 | Checkpoint | IJBB TAR@1e-4 | IJBC TAR@1e-4 | LFW T@1e-3 drop | CFP-FP T@1e-3 drop |
 |---|---|---|---|---|
@@ -105,15 +107,17 @@ Epochs 20–39:  mask_prob=0.10 introduced
 
 **What's new vs phase 2:**
 
-### True asymmetric distillation (`dali_true_asymmetry: true`)
-In phase 1 and 2, both the student and teacher see the same augmented image. In phase 3, the teacher always sees the **clean (unaugmented)** image while the student sees the **augmented** one. This is the key change:
+### Asymmetric distillation (active in all phases)
+
+The training loop in `engine/train.py` always feeds the **clean image** to the teacher and the **augmented image** to the student — in every phase:
 
 ```
-Phase 1/2:   student(aug_img) ─── KD loss ──► teacher(aug_img)
-Phase 3:     student(aug_img) ─── KD loss ──► teacher(clean_img)
+All phases:  student(aug_img) ─── KD loss ──► teacher(clean_img)
 ```
 
-The teacher now provides clean, unbiased soft targets even when the student input is occluded or blurred. This prevents the student from distilling noise from a confused teacher and gives a stable learning signal throughout the entire curriculum.
+This is hardcoded at the batch level: `teacher(clear)` / `student(masked)` (lines 443–467 of `train.py`). The teacher always provides unbiased soft targets regardless of what augmentation the student sees.
+
+> **Note:** The `dali_true_asymmetry: true` flag in the Phase 3 config is dead config — it is never read by any code in the training pipeline. It has no effect. All three phases have always been asymmetric.
 
 ### SWA (Stochastic Weight Averaging)
 Starting at epoch 35, a running average of model weights is maintained with a constant low LR (5×10⁻⁵). The SWA checkpoint averages epochs 35–39, smoothing over the oscillations that occur at the end of cosine/step annealing. This is what makes `phase3/swa` significantly more robust than `phase3/latest` at strict TAR thresholds.
@@ -148,7 +152,7 @@ Epochs 35–39: SWA accumulation (constant LR 5e-5)
 |---|---|---|---|
 | Spatial KD | ✗ | ✓ | ✓ |
 | Occlusion curriculum | Light (10%) | Full | Full |
-| Asymmetric distillation | ✗ | ✗ | ✓ |
+| Asymmetric distillation | ✓ | ✓ | ✓ |
 | SWA | ✗ | ✗ | ✓ (ep35–39) |
 | Best IJB clean | ✓ | ✗ | — |
 | Best occlusion robustness | ✗ | ✗ | ✓ (swa) |
