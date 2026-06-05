@@ -52,6 +52,20 @@ class FacePreprocessor:
         scale = float(image_size) / 112.0
         return template * scale
 
+    def crop_center(self, image_bgr: np.ndarray, bbox_xyxy: tuple[float, float, float, float]) -> np.ndarray:
+        x1, y1, x2, y2 = bbox_xyxy
+        h_img, w_img = image_bgr.shape[:2]
+        x1i = max(0, int(x1))
+        y1i = max(0, int(y1))
+        x2i = min(w_img, int(x2 + 0.5))
+        y2i = min(h_img, int(y2 + 0.5))
+        crop = image_bgr[y1i:y2i, x1i:x2i]
+        if crop.size == 0:
+            crop = image_bgr
+        enhanced = self._clahe_bgr(crop)
+        resized = cv2.resize(enhanced, (self.cfg.image_size, self.cfg.image_size), interpolation=cv2.INTER_LINEAR)
+        return cv2.cvtColor(resized, cv2.COLOR_BGR2RGB)
+
     def align(self, image_bgr: np.ndarray, landmarks5: np.ndarray) -> np.ndarray:
         if landmarks5.shape != (5, 2):
             raise ValueError(f"Expected landmarks shape (5,2), got {landmarks5.shape}")

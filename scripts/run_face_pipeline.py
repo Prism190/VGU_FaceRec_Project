@@ -433,6 +433,46 @@ def _draw_observation(frame_bgr: np.ndarray, obs: dict, *, show_track_id: bool =
     )
 
 
+def _draw_ghost_track(
+    frame_bgr: np.ndarray,
+    bbox_xyxy: tuple[float, float, float, float],
+    identity_name: str,
+    missed_frames: int,
+    *,
+    show_track_id: bool = False,
+    track_id: int | None = None,
+) -> None:
+    """Draw a dimmed corner-segment box for a track coasting on Kalman prediction."""
+    h, w = frame_bgr.shape[:2]
+    base = float(min(h, w))
+    font_scale = max(0.75, base / 1400.0)
+    text_thickness = max(1, int(round(font_scale * 1.5)))
+
+    x1, y1, x2, y2 = [int(v) for v in bbox_xyxy]
+    fade = max(0.25, 1.0 - float(missed_frames) / 20.0)
+    color = (0, int(160 * fade), 0)
+
+    # Corner-segment style to distinguish from solid observation boxes.
+    seg = max(12, (x2 - x1) // 5)
+    for sx1, sy1, sx2, sy2 in [
+        (x1, y1, x1 + seg, y1), (x2 - seg, y1, x2, y1),
+        (x1, y2, x1 + seg, y2), (x2 - seg, y2, x2, y2),
+        (x1, y1, x1, y1 + seg), (x1, y2 - seg, x1, y2),
+        (x2, y1, x2, y1 + seg), (x2, y2 - seg, x2, y2),
+    ]:
+        cv2.line(frame_bgr, (sx1, sy1), (sx2, sy2), color, 2)
+
+    label_parts = [identity_name]
+    if show_track_id and track_id is not None:
+        label_parts.append(f"T{track_id}")
+    label = " | ".join(label_parts)
+    cv2.putText(
+        frame_bgr, label,
+        (max(0, x1), max(15, y1 - 6)),
+        cv2.FONT_HERSHEY_SIMPLEX, font_scale, color, text_thickness, cv2.LINE_AA,
+    )
+
+
 def _normalize_embedding(vec: np.ndarray, eps: float = 1e-8) -> np.ndarray:
         arr = np.asarray(vec, dtype=np.float32).reshape(-1)
         norm = float(np.linalg.norm(arr))
@@ -2034,6 +2074,31 @@ def main() -> None:
                         print(f"[pipeline] video_writer_codec={writer_codec} path={writer_path}")
                     for row in rows_for_draw:
                         _draw_observation(frame_bgr, row, show_track_id=bool(args.show_track_id))
+                    # Draw ghost boxes for identified tracks coasting on Kalman prediction.
+                    # Only for short gaps: Kalman position drifts and becomes misleading after
+                    # more than ~10 missed frames, so suppress beyond that.
+                    _GHOST_MAX_MISSED = 10
+                    observed_tids = {int(row["track_id"]) for row in rows_for_draw}
+                    for ghost_track in pipeline.track_manager.tracks.values():
+                        ghost_tid = int(ghost_track.track_id)
+                        if ghost_tid in observed_tids:
+                            continue
+                        if int(ghost_track.missed_frames) > _GHOST_MAX_MISSED:
+                            continue
+                        ghost_cached = track_identity_cache.get(ghost_tid)
+                        if ghost_cached is None:
+                            continue
+                        ghost_name = ghost_cached.get("identity_name")
+                        if not ghost_name:
+                            continue
+                        _draw_ghost_track(
+                            frame_bgr,
+                            ghost_track.bbox_xyxy,
+                            str(ghost_name),
+                            int(ghost_track.missed_frames),
+                            show_track_id=bool(args.show_track_id),
+                            track_id=ghost_tid,
+                        )
                     writer.write(frame_bgr)
 
                 if args.print_every > 0 and (frames_processed % int(args.print_every) == 0):

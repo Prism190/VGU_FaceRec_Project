@@ -251,11 +251,13 @@ class TrackManager:
                 landmarks5=landmarks,
                 last_frame_idx=last_frame,
                 missed_frames=missed,
+                matched_det_idx=det_ind if (0 <= det_ind < len(detections)) else None,
             )
 
         for tid in list(self.tracks.keys()):
             if tid not in active_track_ids:
                 self.tracks.pop(tid, None)
+                self.history.pop(tid, None)
 
         self._update_history(frame_idx=frame_idx)
         return list(self.tracks.values())
@@ -361,11 +363,13 @@ class TrackManager:
                 landmarks5=landmarks,
                 last_frame_idx=last_frame_idx,
                 missed_frames=missed,
+                matched_det_idx=det_idx if (det_idx is not None and 0 <= det_idx < len(detections)) else None,
             )
 
         for tid in list(self.tracks.keys()):
             if tid not in active_track_ids:
                 self.tracks.pop(tid, None)
+                self.history.pop(tid, None)
 
         self._update_history(frame_idx=frame_idx)
         return list(self.tracks.values())
@@ -408,6 +412,7 @@ class TrackManager:
                 track.landmarks5 = det.landmarks5
                 track.last_frame_idx = frame_idx
                 track.missed_frames = 0
+                track.matched_det_idx = di
                 matched_track_ids.add(tid)
                 assigned_detection_ids.add(di)
 
@@ -434,6 +439,7 @@ class TrackManager:
                     track.landmarks5 = det.landmarks5
                     track.last_frame_idx = frame_idx
                     track.missed_frames = 0
+                    track.matched_det_idx = det_idx
                     matched_track_ids.add(best_tid)
                     assigned_detection_ids.add(det_idx)
 
@@ -449,6 +455,7 @@ class TrackManager:
                 landmarks5=det.landmarks5,
                 last_frame_idx=frame_idx,
                 missed_frames=0,
+                matched_det_idx=det_idx,
             )
             matched_track_ids.add(tid)
 
@@ -457,12 +464,14 @@ class TrackManager:
         for tid, track in self.tracks.items():
             if tid in matched_track_ids:
                 continue
+            track.matched_det_idx = None
             track.missed_frames += 1
             if track.missed_frames > self.max_missed_frames:
                 dead_ids.append(tid)
 
         for tid in dead_ids:
             self.tracks.pop(tid, None)
+            self.history.pop(tid, None)
 
         self._update_history(frame_idx=frame_idx)
         return list(self.tracks.values())

@@ -9,7 +9,7 @@ from .aggregation import TrackEmbeddingBuffer
 from .liveness import ThresholdLivenessGate
 from .preprocess import FacePreprocessor
 from .quality_gate import MagnitudeQualityGate
-from .tracking import TrackManager, iou_xyxy
+from .tracking import TrackManager
 from .types import FaceDetection, FaceObservation
 
 
@@ -33,7 +33,10 @@ class RuntimePipeline:
         face_rgbs: list[np.ndarray] = []
         embeddings: list[np.ndarray] = []
         for det in detections:
-            face_rgb = self.preprocess(frame_bgr, det.landmarks5)
+            if det.landmarks_synthetic:
+                face_rgb = self.preprocess.crop_center(frame_bgr, det.bbox_xyxy)
+            else:
+                face_rgb = self.preprocess(frame_bgr, det.landmarks5)
             emb = self.embed_fn(face_rgb)
             emb = np.asarray(emb, dtype=np.float32)
             face_rgbs.append(face_rgb)
@@ -47,31 +50,25 @@ class RuntimePipeline:
         )
         live_track_ids = {int(t.track_id) for t in tracks}
 
-        # Liveness cache is only meaningful for currently active tracks.
+        # Liveness cache and embedding buffers are only meaningful for currently active tracks.
         self._liveness_cache = {tid: st for tid, st in self._liveness_cache.items() if tid in live_track_ids}
+        self.track_buffers = {tid: buf for tid, buf in self.track_buffers.items() if tid in live_track_ids}
+
+        # Use the tracker's own det→track assignment; no secondary greedy override.
+        det_to_track_id: dict[int, int] = {}
+        for track in tracks:
+            if track.matched_det_idx is not None:
+                det_to_track_id[track.matched_det_idx] = track.track_id
+        tracks_by_id = {t.track_id: t for t in tracks}
 
         observations: list[FaceObservation] = []
-        det_to_track: dict[int, int] = {}
-        used_tracks: set[int] = set()
         for det_idx, det in enumerate(detections):
-            best_track_idx = -1
-            best_iou = 0.3
-            for track_idx, track in enumerate(tracks):
-                if track_idx in used_tracks:
-                    continue
-                score = iou_xyxy(track.bbox_xyxy, det.bbox_xyxy)
-                if score > best_iou:
-                    best_iou = score
-                    best_track_idx = track_idx
-            if best_track_idx >= 0:
-                used_tracks.add(best_track_idx)
-                det_to_track[det_idx] = best_track_idx
-
-        for det_idx, det in enumerate(detections):
-            track_idx = det_to_track.get(det_idx)
-            if track_idx is None:
+            track_id = det_to_track_id.get(det_idx)
+            if track_id is None:
                 continue
-            track = tracks[track_idx]
+            track = tracks_by_id.get(track_id)
+            if track is None:
+                continue
 
             face_rgb = face_rgbs[det_idx]
             interval = max(0, int(self.liveness_interval_frames))

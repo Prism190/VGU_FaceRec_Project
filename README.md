@@ -321,6 +321,13 @@ data/face_db/
 
 Default is **DeepSORT** (`--tracker-backend deepsort`). Use BoT-SORT with `--tracker-backend botsort`.
 
+**Identity source:** the pipeline loads identities exclusively from `data/face_db/known/`. Add
+photos for a new person by creating `data/face_db/known/identities/id_NNNNNN__name/` with a
+`meta.json` and a `photos/` folder. The pipeline re-embeds from photos on every run
+(`--known-db-refresh-from-photos`, on by default). Do **not** pass `--gallery-npz` or
+`--identity-names-json` alongside `--face-db-root` — the NPZ/JSON paths are from the old
+label-chain pipeline and will conflict with face_db IDs and names.
+
 ## Anti-spoofing comparison
 
 | | MiniFASNetV2 (recommended) | LitMAS |
@@ -340,6 +347,7 @@ MiniFASNetV2 is the recommended FAS model. LitMAS requires real PAD (print/repla
 | File | Contents |
 |---|---|
 | [`docs/training_phases.md`](docs/training_phases.md) | Phase 1/2/3 architecture, loss, schedules, results |
+| [`docs/pipeline_fixes_2026-06-05.md`](docs/pipeline_fixes_2026-06-05.md) | Runtime pipeline bug fixes (OOM leaks, duplicate tracking, landmark fallback, greedy override) |
 | [`docs/pipeline_next_stage.md`](docs/pipeline_next_stage.md) | Runtime pipeline module map |
 | [`docs/face_labeling_and_ijb_clean_eval_commands.md`](docs/face_labeling_and_ijb_clean_eval_commands.md) | Full pipeline commands, labeling UI, IJB eval |
 | [`docs/pipeline_metrics_and_benchmarks.md`](docs/pipeline_metrics_and_benchmarks.md) | Metric interpretation and eval commands |

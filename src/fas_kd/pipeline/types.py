@@ -11,6 +11,7 @@ class FaceDetection:
     bbox_xyxy: tuple[float, float, float, float]
     landmarks5: np.ndarray
     score: float
+    landmarks_synthetic: bool = False
     extra: dict[str, Any] = field(default_factory=dict)
 
 
@@ -21,6 +22,7 @@ class TrackedFace:
     landmarks5: np.ndarray
     last_frame_idx: int
     missed_frames: int = 0
+    matched_det_idx: int | None = None
 
 
 @dataclass

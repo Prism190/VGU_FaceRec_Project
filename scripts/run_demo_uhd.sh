@@ -12,13 +12,11 @@ TAG="${1:-demo}"
 TRACKER="${TRACKER:-deepsort}"
 LIVENESS="${LIVENESS:-none}"
 
-# Phase1 checkpoint — the curated gallery and name map were built in phase1 space.
+# Phase1 checkpoint — face_db is the authoritative identity source.
 CONFIG="$ROOT/configs/train_ms1m_magface_phase1_cplus_aplus_v1.yaml"
 CKPT="$ROOT/runs/ms1m_magface_phase1_cplus_aplus_v1/checkpoints/latest.pt"
 SOURCE="$ROOT/data/raw/pipeline_demo/3209828-uhd_2560_1440_25fps.mp4"
 DETECTOR="$ROOT/checkpoints/pretrained/yolo11n-face-age.pt"
-GALLERY="$ROOT/logs/pipeline_uhd2560_label_chain_gallery.npz"
-NAMES="$ROOT/logs/pipeline_uhd2560_label_chain_identity_names.json"
 
 # Tracker-specific args
 if [ "$TRACKER" = "botsort" ]; then
@@ -50,7 +48,6 @@ fi
   --detector-model "$DETECTOR" \
   --det-conf 0.08 --det-iou 0.45 --det-imgsz 1280 \
   --det-rescue-conf 0.05 --det-rescue-imgsz 1920 --det-rescue-min-primary 2 \
-  --gallery-npz "$GALLERY" --identity-names-json "$NAMES" \
   $TRACKER_ARGS \
   --quality-min 10.0 --quality-max 110.0 \
   --match-threshold 0.46 --match-topk 7 --match-min-margin 0.12 \
