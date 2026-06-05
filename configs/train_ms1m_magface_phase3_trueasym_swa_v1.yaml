@@ -1,0 +1,129 @@
+experiment:
+  name: mobilenetv4_medium_magface_kd_ms1m_phase3_trueasym_swa_v1
+  output_root: runs/ms1m_magface_phase3_trueasym_swa_v1
+  seed: 3407
+
+system:
+  use_amp: true
+  use_dali: true
+  dali_aug: true
+  dali_true_asymmetry: true
+  dali_num_threads: 2
+  dali_prefetch_queue_depth: 1
+  dali_initial_fill: 32768
+  dali_random_shuffle: true
+  num_workers: 16
+  val_num_workers: 2
+  val_loader_timeout_s: 120
+  use_dataloaderx: true
+  recordio_num_workers: 8
+  recordio_decode_retries: 64
+  pin_memory: true
+  cudnn_benchmark: true
+
+distributed:
+  enabled: true
+
+data:
+  image_size: 112
+  mean: [0.5, 0.5, 0.5]
+  std: [0.5, 0.5, 0.5]
+  hflip_prob: 0.5
+  mask_prob: 0.30
+  mask_fill: zero
+  use_clahe: false
+  train_manifest: data/manifests/ms1m_clean_train.csv
+  val_sets:
+    - name: ms1m_proxy
+      pairs_csv: data/manifests/ms1m_proxy_pairs_v1.csv
+  ijb:
+    protocol_csv: data/manifests/ijb_1to1_pairs.csv
+    ijbb_root: data/raw/ijb/ijb/IJBB
+    ijbc_root: data/raw/ijb/ijb/IJBC
+
+teacher:
+  source: magface
+  arch: iresnet100
+  model_name: ""
+  checkpoint: checkpoints/pretrained/magface_iresnet100_ms1mv2.pth
+  embedding_dim: 512
+  input_mode: from_minus_one_to_zero_one
+  swap_rb: false
+
+student:
+  backbone_name: mobilenetv4_conv_medium
+  pretrained: true
+  embedding_dim: 512
+  projection_activation: none
+  spatial_out_channels: 512
+
+margin_head:
+  type: magface
+  scale: 64.0
+  margin: 0.42
+  magface_margin_min: 0.42
+  magface_margin_max: 0.42
+  feature_norm_lower: 10.0
+  feature_norm_upper: 110.0
+  regularizer_lambda: 35.0
+
+loss:
+  lambda_cls: 1.0
+  kd_type: mse
+  lambda_kd_start: 5.0
+  lambda_kd_end: 8.0
+  kd_ramp_epochs: 8
+  lambda_rkd_distance: 0.0
+  lambda_rkd_angle: 0.0
+  use_spatial_kd: true
+  lambda_spatial_start: 1.0
+  lambda_spatial_end: 2.0
+  spatial_ramp_epochs: 12
+
+optim:
+  type: adamw
+  lr: 0.0001
+  betas: [0.9, 0.999]
+  weight_decay: 0.0001
+  grad_clip_norm: 2.0
+
+scheduler:
+  milestones: [20, 30, 36]
+  gamma: 0.1
+  warmup_epochs: 3
+  warmup_start_factor: 0.1
+
+train:
+  epochs: 40
+  batch_size_per_gpu: 256
+  auto_resume: false
+  resume_from: null
+  show_progress_bar: true
+  log_interval: 100
+  save_every: 2
+  eval_every: 2
+  best_metric: mean_tar_far_1e-4
+  early_stop_patience: 0
+  mask_free_epochs: 0
+  swa:
+    enabled: true
+    start_epoch: 35
+    lr: 5.0e-5
+  occlusion_curriculum:
+    enabled: true
+    clean_epochs: 10
+    ramp_start_epoch: 10
+    ramp_end_epoch: 25
+    mask_prob_start: 0.10
+    mask_prob_end: 0.30
+    gaussian_prob_start: 0.25
+    gaussian_prob_end: 0.75
+    gaussian_sigma_start: 1.0
+    gaussian_sigma_end: 1.5
+    gaussian_kernel_size: [5, 11]
+    motion_prob_start: 0.10
+    motion_prob_end: 0.55
+    motion_kernel_size: [5, 9]
+
+metrics:
+  target_fars: [0.001, 0.0001, 0.00001]

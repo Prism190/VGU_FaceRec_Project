@@ -1,0 +1,37 @@
+# Python
+__pycache__/
+*.py[cod]
+*.so
+*.egg-info/
+
+# Virtual env
+venv/
+.venv/
+
+# Runtime artifacts
+logs/*
+!logs/.gitkeep
+checkpoints/*
+!checkpoints/.gitkeep
+work/*
+!work/.gitkeep
+
+# Data and secrets
+data/**
+!data/.gitkeep
+!data/**/.gitkeep
+.env
+
+# Local caches and experiment outputs
+.cache/
+.hf_home/
+.home/
+hf_safe_cache/
+backups/
+runs/
+
+# Model artifacts
+*.pt
+*.pth
+*.onnx
+*.ckpt

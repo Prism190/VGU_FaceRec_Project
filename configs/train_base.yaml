@@ -1,0 +1,88 @@
+experiment:
+  name: mobilenetv4_magface_kd_baseline
+  output_root: .
+  seed: 3407
+
+system:
+  use_amp: true
+  num_workers: 8
+  pin_memory: true
+  cudnn_benchmark: true
+
+distributed:
+  enabled: true
+
+data:
+  image_size: 112
+  mean: [0.5, 0.5, 0.5]
+  std: [0.5, 0.5, 0.5]
+  hflip_prob: 0.5
+  mask_prob: 0.3
+  mask_fill: zero
+  use_clahe: false
+  train_manifest: data/manifests/casia_train.csv
+  val_sets:
+    - name: lfw
+      pairs_csv: data/manifests/lfw_pairs.csv
+    - name: cfp_fp
+      pairs_csv: data/manifests/cfp_fp_pairs.csv
+    - name: agedb30
+      pairs_csv: data/manifests/agedb30_pairs.csv
+  ijb:
+    protocol_csv: data/manifests/ijb_1to1_pairs.csv
+    ijbb_root: data/raw/ijb/ijb/IJBB
+    ijbc_root: data/raw/ijb/ijb/IJBC
+
+teacher:
+  source: magface
+  arch: iresnet18
+  model_name: ""
+  checkpoint: checkpoints/pretrained/magface_iresnet18_casia.pth
+  embedding_dim: 512
+  input_mode: identity
+  swap_rb: false
+
+student:
+  backbone_name: mobilenetv4_conv_small.e2400_r224_in1k
+  pretrained: true
+  embedding_dim: 512
+
+margin_head:
+  type: magface
+  scale: 64.0
+  margin: 0.35
+  magface_margin_min: 0.30
+  magface_margin_max: 0.50
+  feature_norm_lower: 10.0
+  feature_norm_upper: 110.0
+  regularizer_lambda: 35.0
+
+loss:
+  lambda_cls: 1.0
+  lambda_kd_start: 0.2
+  lambda_kd_end: 0.6
+  kd_ramp_epochs: 8
+  lambda_rkd_distance: 0.0
+  lambda_rkd_angle: 0.0
+
+optim:
+  lr: 0.001
+  weight_decay: 0.0001
+  betas: [0.9, 0.999]
+  grad_clip_norm: 5.0
+
+scheduler:
+  t_max_epochs: 30
+  eta_min: 0.000001
+
+train:
+  epochs: 30
+  batch_size_per_gpu: 192
+  show_progress_bar: true
+  log_interval: 50
+  save_every: 1
+  eval_every: 1
+  best_metric: mean_tar_far_1e-4
+
+metrics:
+  target_fars: [0.001, 0.0001, 0.00001]
