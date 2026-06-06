@@ -188,6 +188,18 @@ The benchmarks (IJBB/IJBC) test closed-set 1:1 verification. The deployed pipeli
 | Training data | MS1M-RetinaFace, ~5.8M images, ~85k identities |
 | Hardware | 2× Tesla P100 16GB, DDP |
 
+### 7.2 Teacher Input Normalization — Integration Trap
+
+The teacher (MagFace iResNet-100) was trained by InsightFace with **BGR input normalized to [-1, 1]**. The student training pipeline uses standard PyTorch conventions: **RGB input with mean=0.5, std=0.5** (also mapping to [-1, 1]).
+
+Both land in the same numeric range, but the channel order differs. Loading the teacher checkpoint and forwarding the same tensor the student sees produces silently incorrect teacher embeddings — the colors are transposed, leading the student to distill against a systematically corrupted target for the full training run with no error or warning.
+
+The `FrozenTeacher` wrapper (`src/fas_kd/models/teacher.py`) handles the conversion via two config fields:
+- `input_mode: from_minus_one_to_zero_one` — rescales the input to the range the teacher checkpoint expects.
+- `swap_rb: false` — the teacher was saved in BGR order; the training pipeline feeds RGB; this flag controls whether the wrapper swaps channels before forwarding.
+
+Anyone integrating a different teacher checkpoint must verify these two fields. Getting them wrong is undetectable from training metrics alone for many epochs.
+
 ### 7.2 Asymmetric Distillation — Active in All Phases
 
 A key architectural decision, hardcoded in `engine/train.py`: the **teacher always receives the clean image** while the **student receives the augmented/masked image**. This is not a Phase 3 exclusive — it is the default behaviour in every phase:
@@ -221,7 +233,9 @@ The teacher provides clean, unbiased soft targets even when the student's input 
 
 **Config:** `train_ms1m_magface_phase2_occlusion_spatial_v1.yaml`
 
-Introduced spatial KD (MSE between student and teacher intermediate feature maps via a 512-channel 1×1 projection head) alongside a ramped occlusion curriculum (up to 30% mask + heavy Gaussian/motion blur).
+Introduced spatial KD (MSE between student and teacher intermediate feature maps) alongside a ramped occlusion curriculum (up to 30% mask + heavy Gaussian/motion blur).
+
+**Spatial KD architecture:** A 512-channel 1×1 convolution projection head is added to the student's last feature map. The teacher's intermediate spatial output is extracted via `forward_with_spatial()`. The student's feature map is `512×4×4` while the teacher's is `512×7×7` — a spatial resolution mismatch. The training loop resolves this with bilinear interpolation (`F.interpolate`) before computing the MSE loss. The 1×1 projection ensures channel dimensions match; interpolation ensures spatial dimensions match.
 
 **Failure analysis:** Phase 2's best checkpoint appeared at epoch 9 — before the occlusion curriculum ramped significantly. Root cause: **spatial KD vs masking contradiction** (bug #11). Spatial MSE forced the student's intermediate feature map to match the teacher's clean features in the lower-face region, but that region was a black square. Zero-information input, non-zero gradient — the student was penalised for not reconstructing content it had no access to. This stalled convergence and caused performance to degrade from epoch 10 onward.
 
@@ -283,6 +297,16 @@ Phase 4 incorporates every training quality fix:
 | #14 (done) | Per-rank DALI seed + per-worker DataLoader seed |
 
 **Curriculum (same as Phase 3):** softer blur, 10 clean epochs, ramp epochs 10–25, SWA from epoch 35.
+
+**Expected improvements over Phase 3:**
+
+- **Better intra-batch diversity** (#10): each image in a batch now sees a different blur intensity and motion direction. BatchNorm running statistics accumulate a more representative distribution, improving generalisation to real-world blur diversity.
+- **Stable early training** (#13): the π-fallback prevents spurious gradient spikes in the first ~5 epochs when some samples have cosine similarity near −1. This should produce a smoother loss curve in the early warm-up phase.
+- **Genuine DDP augmentation diversity** (#14): all GPU ranks now apply different random augmentations per batch. Previously each rank produced identical augmented batches, halving the effective data diversity with no speed benefit.
+- **LR drop no longer collides with occlusion ramp** (#12): the first LR drop at epoch 27 gives the model two epochs of stable full-occlusion training before plasticity is reduced. Phases 1–3 dropped LR at epoch 20, the midpoint of the ramp, which suppressed adaptation exactly when augmentation intensity was changing fastest.
+- **Spatial KD on clean epochs only** (#11): already fixed, identical to what Phase 3 would have with the fix applied.
+
+The combined effect is primarily expected to improve **mid-to-late training stability** and **occlusion metric variance** rather than peak clean-face accuracy. Phase 4/swa vs Phase 3/swa is the meaningful comparison; Phase 1 remains the reference for clean-face performance.
 
 **Training launch:**
 ```bash
