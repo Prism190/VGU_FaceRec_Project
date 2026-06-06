@@ -31,6 +31,9 @@ if [ "${INSTALL_DALI}" = "1" ]; then
 	python -m pip install "${DALI_PKG}"
 fi
 
+echo "Applying MXNet NumPy 2.0 compatibility patches..."
+python "${PROJECT_ROOT}/scripts/fix_mxnet_numpy2_compat.py"
+
 cat <<EOF
 Environment ready:
 - Venv: ${VENV_PATH}
