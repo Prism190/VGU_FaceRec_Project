@@ -100,7 +100,17 @@ class MagFaceHead(nn.Module):
         sin_theta = torch.sqrt(torch.clamp(1.0 - target_cosine**2, min=1e-7))
         cos_m = torch.cos(adaptive_margin)
         sin_m = torch.sin(adaptive_margin)
+        # Normal case: cos(θ + m)
         target_margin_cosine = (target_cosine * cos_m) - (sin_theta * sin_m)
+        # π-fallback (fix #13): when θ + m > π the addition formula wraps around and
+        # produces a value that rewards hard negatives.  Guard with a linear approximation:
+        # cos(θ) - sin(m) * m  (standard InsightFace convention).
+        theta = torch.acos(target_cosine.clamp(-1.0 + 1e-7, 1.0 - 1e-7))
+        target_margin_cosine = torch.where(
+            (theta + adaptive_margin) > math.pi,
+            target_cosine - sin_m * adaptive_margin,
+            target_margin_cosine,
+        )
         target_margin_cosine = target_margin_cosine.to(dtype=cosine.dtype)
 
         logits = cosine.clone()

@@ -47,6 +47,7 @@ def create_dali_recordio_loader(
     dali_aug: bool = False,
     image_size: int = 112,
     reader_name: str = "reader",
+    seed: int = -1,
 ) -> Iterator:
     try:
         import nvidia.dali.fn as fn
@@ -90,12 +91,17 @@ def create_dali_recordio_loader(
     hsv_hue = fn.random.uniform(range=(0.0, 20.0), dtype=types.FLOAT)
     hsv_saturation = fn.random.uniform(range=(1.0, 1.2), dtype=types.FLOAT)
 
-    pipe = Pipeline(
+    # Per-rank seed so each GPU applies different random augmentations (fix #14).
+    # seed=-1 lets DALI pick its own default (non-deterministic).
+    pipe_kwargs: dict = dict(
         batch_size=batch_size,
         num_threads=num_threads,
         device_id=local_rank,
         prefetch_queue_depth=prefetch_queue_depth,
     )
+    if seed >= 0:
+        pipe_kwargs["seed"] = seed + local_rank
+    pipe = Pipeline(**pipe_kwargs)
 
     condition_flip = fn.random.coin_flip(probability=0.5)
 

@@ -254,9 +254,13 @@ def _apply_training_augmentations_batch(
 
     if gaussian_blur_prob > 0.0:
         g_kernel = _sample_odd_kernel(gaussian_kernel_range[0], gaussian_kernel_range[1], device=out.device)
+        # Jitter sigma ±30 % around the scheduled value so consecutive batches at the same
+        # curriculum epoch don't all share an identical blur intensity (fix #10).
+        actual_sigma = float(gaussian_sigma * (0.7 + 0.6 * torch.rand(1, device=out.device).item()))
+        actual_sigma = max(actual_sigma, 0.05)
         gaussian_kernel = _build_gaussian_kernel2d(
             kernel_size=g_kernel,
-            sigma=gaussian_sigma,
+            sigma=actual_sigma,
             device=out.device,
             dtype=out.dtype,
         )
@@ -264,15 +268,20 @@ def _apply_training_augmentations_batch(
         out = _apply_probabilistic_mix(base=out, augmented=blurred, apply_prob=gaussian_blur_prob)
 
     if motion_blur_prob > 0.0:
-        m_kernel = _sample_odd_kernel(motion_kernel_range[0], motion_kernel_range[1], device=out.device)
-        blur_mode = int(torch.randint(0, 4, (1,), device=out.device).item())
-        motion_kernel = _build_motion_kernel2d(
-            kernel_size=m_kernel,
-            mode=blur_mode,
-            device=out.device,
-            dtype=out.dtype,
-        )
-        motion_blurred = _depthwise_blur_batch(out, motion_kernel)
+        b = int(out.shape[0])
+        m_kernel_size = _sample_odd_kernel(motion_kernel_range[0], motion_kernel_range[1], device=out.device)
+        # Build all four direction kernels once, then assign each image its own direction
+        # (fix #10: previously the whole batch shared a single randomly-drawn direction).
+        motion_kernels = [
+            _build_motion_kernel2d(m_kernel_size, mode, out.device, out.dtype)
+            for mode in range(4)
+        ]
+        per_sample_modes = torch.randint(0, 4, (b,), device=out.device)
+        motion_blurred = out.clone()
+        for mode in range(4):
+            idx = (per_sample_modes == mode).nonzero(as_tuple=True)[0]
+            if idx.numel() > 0:
+                motion_blurred[idx] = _depthwise_blur_batch(out[idx], motion_kernels[mode])
         out = _apply_probabilistic_mix(base=out, augmented=motion_blurred, apply_prob=motion_blur_prob)
 
     return out
@@ -640,6 +649,8 @@ def run_training(config: dict[str, Any]) -> None:
                 prefetch_queue_depth=int(config["system"].get("dali_prefetch_queue_depth", 1)),
                 dali_aug=bool(config["system"].get("dali_aug", False)),
                 image_size=int(config["data"].get("image_size", 112)),
+                # Per-rank seed so each GPU's DALI pipeline applies different augmentations (fix #14).
+                seed=int(config["experiment"]["seed"]),
             )
 
             if is_main_process(ctx):
@@ -650,6 +661,16 @@ def run_training(config: dict[str, Any]) -> None:
                     f"dali_aug={bool(config['system'].get('dali_aug', False))}"
                 )
         else:
+            # Per-worker seed: base + DDP rank + worker index (fix #14).
+            _base_seed = int(config["experiment"]["seed"]) + ctx.rank
+            def _worker_init_fn(worker_id: int, _base: int = _base_seed) -> None:
+                import random as _random
+                import numpy as _np
+                s = (_base + worker_id) & 0xFFFF_FFFF
+                _random.seed(s)
+                _np.random.seed(s)
+                torch.manual_seed(s)
+
             loader_kwargs = dict(
                 dataset=train_dataset,
                 batch_size=int(config["train"]["batch_size_per_gpu"]),
@@ -659,6 +680,7 @@ def run_training(config: dict[str, Any]) -> None:
                 pin_memory=bool(config["system"].get("pin_memory", True)),
                 drop_last=True,
                 persistent_workers=effective_workers > 0,
+                worker_init_fn=_worker_init_fn if effective_workers > 0 else None,
             )
 
             use_dataloaderx = bool(config["system"].get("use_dataloaderx", True)) and ctx.device.type == "cuda"
