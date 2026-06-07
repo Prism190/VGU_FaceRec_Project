@@ -33,9 +33,10 @@ def _unwrap(module: torch.nn.Module) -> torch.nn.Module:
     return module.module if isinstance(module, DDP) else module
 
 
-def _ddp_wrap(module: torch.nn.Module, ctx: DistributedContext) -> torch.nn.Module:
+def _ddp_wrap(module: torch.nn.Module, ctx: DistributedContext, find_unused_parameters: bool = False) -> torch.nn.Module:
     if ctx.is_distributed and ctx.device.type == "cuda":
-        return DDP(module, device_ids=[ctx.local_rank], output_device=ctx.local_rank, broadcast_buffers=False)
+        return DDP(module, device_ids=[ctx.local_rank], output_device=ctx.local_rank,
+                   broadcast_buffers=False, find_unused_parameters=find_unused_parameters)
     return module
 
 
@@ -710,7 +711,10 @@ def run_training(config: dict[str, Any]) -> None:
 
         teacher = build_frozen_teacher(config["teacher"]).to(ctx.device)
 
-        student = _ddp_wrap(student, ctx)
+        # When spatial KD can be dynamically gated off (masked epochs), the spatial
+        # projection head won't receive gradients in those steps, so DDP must allow it.
+        _student_has_optional_params = int(config["student"].get("spatial_out_channels", 0)) > 0
+        student = _ddp_wrap(student, ctx, find_unused_parameters=_student_has_optional_params)
         margin_head = _ddp_wrap(margin_head, ctx)
 
         params = list(student.parameters()) + list(margin_head.parameters())
