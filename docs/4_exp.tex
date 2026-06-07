@@ -33,6 +33,8 @@ We evaluate clean image-level verification on LFW, CFP-FP, and AgeDB-30. These d
 
 For template-based verification, we evaluate on IJB-B and IJB-C. These protocols are more challenging because each subject template may contain multiple still images or video frames. We report AUC and TAR at fixed FAR thresholds, with emphasis on TAR@$10^{-4}$ because low-FAR performance is important for security-sensitive deployment \cite{ijbb,ijbc}.
 
+\textbf{Training and evaluation identity overlap.} MS1M-RetinaFace is a web-crawled celebrity dataset widely used in face recognition. LFW, CFP-FP, and AgeDB-30 were collected independently from different sources (LFW from web, CFP from media, AgeDB from internet archives); however, as these benchmark subjects are also celebrities, some identity overlap with MS1M is plausible. This is an acknowledged limitation common to most published face recognition work using MS1M. IJB-B and IJB-C were collected by NIST from government-adjacent subjects and are unlikely to contain systematic overlap with MS1M. All benchmarks are evaluated at strict FAR thresholds (TAR@$10^{-4}$), which are less sensitive to individual leaking identities than accuracy-at-threshold metrics. RMFRD/AFDB contains Asian celebrity faces primarily not present in MS1M.
+
 To measure partial-occlusion robustness, we use a synthetic lower-face masking protocol. The lower facial region is masked during evaluation, and robustness is measured by the drop in TAR compared with the clean setting. A smaller TAR drop indicates better robustness to masked or partially occluded faces.
 
 \subsection{Implementation Details}
