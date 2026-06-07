@@ -1,0 +1,90 @@
+\section{Experiments}
+
+\subsection{Experimental Setup}
+
+We evaluate the proposed method at two levels: face embedding verification and runtime video recognition. The first evaluation measures the discriminative quality of the learned embeddings on standard image and template-based face verification benchmarks. The second evaluation tests the trained encoder inside the full video pipeline, including detection, tracking, liveness filtering, quality gating, track-level pooling, and identity retrieval.
+
+All student models are trained on MS1M using the same teacher-student framework\cite{MS1M}. The teacher is a frozen MagFace iResNet-100 model, and the student is a MobileNetV4-Conv-Medium encoder with 512-dimensional embeddings\cite{magface}\cite{mobilenetv4}. We compare three independently trained variants rather than sequential training stages: a clean KD baseline, a spatial-KD occlusion variant, and an SWA-stabilized robust variant\cite{izmailov2019averagingweightsleadswider}. Each model is trained from scratch for 40 epochs using AdamW, mixed precision, DALI RecordIO loading, a 3-epoch warm-up, and multi-step learning-rate decay at epochs 20, 30, and 36.
+
+\subsection{Training Variants}
+
+Table~\ref{tab:training_variants} summarizes the evaluated training variants. All variants share the same teacher, student backbone, embedding dimension, and main distillation objective, but differ in spatial KD, augmentation policy, and checkpoint stabilization.
+
+\begin{table*}[h]
+\centering
+\caption{Training variants evaluated in this work. Each variant is trained independently from scratch.}
+\label{tab:training_variants}
+\begin{tabular}{lcccc}
+\hline
+\textbf{Variant} & \textbf{Spatial KD} & \textbf{Occlusion Policy} & \textbf{SWA} & \textbf{Purpose} \\
+\hline
+V1: Clean KD & No & Light masking & No & Clean-face recognition \\
+V2: Spatial-Occlusion KD & Yes & Aggressive masking/blur & No & Ablation study \\
+V3: Robust-SWA KD & Yes & Milder masking/blur & Yes & Occlusion robustness \\
+\hline
+\end{tabular}
+\end{table*}
+
+V1 is optimized for clean-face recognition and uses only light lower-face masking after a clean warm-up period. V2 adds spatial KD and a stronger occlusion curriculum with lower-face masking, Gaussian blur, and motion blur. V3 uses a milder occlusion curriculum and applies stochastic weight averaging (SWA) near the end of training to improve robustness and checkpoint stability \cite{izmailov2019averagingweightsleadswider}.
+
+\subsection{Evaluation Protocols}
+
+We evaluate clean image-level verification on LFW, CFP-FP, and AgeDB-30. These datasets cover general unconstrained verification, frontal-to-profile pose variation, and age variation, respectively. We report verification accuracy and the mean accuracy across the three protocols \cite{lfw,cfp,agedb}.
+
+For template-based verification, we evaluate on IJB-B and IJB-C. These protocols are more challenging because each subject template may contain multiple still images or video frames. We report AUC and TAR at fixed FAR thresholds, with emphasis on TAR@$10^{-4}$ because low-FAR performance is important for security-sensitive deployment \cite{ijbb,ijbc}.
+
+To measure partial-occlusion robustness, we use a synthetic lower-face masking protocol. The lower facial region is masked during evaluation, and robustness is measured by the drop in TAR compared with the clean setting. A smaller TAR drop indicates better robustness to masked or partially occluded faces.
+
+\subsection{Implementation Details}
+
+All face crops are resized to $112 \times 112$. The student receives normalized inputs in the range $[-1,1]$, while the teacher input is remapped to $[0,1]$ to match the MagFace checkpoint. The student is trained with a MagFace classification head and embedding-level MSE distillation from the frozen teacher. The KD weight is ramped from 5.0 to 8.0 during the first 8 epochs.
+
+The shared training objective is:
+\begin{equation}
+    \mathcal{L}
+    =
+    \lambda_{\mathrm{cls}}\mathcal{L}_{\mathrm{MagFace}}
+    +
+    \lambda_{\mathrm{kd}}\mathcal{L}_{\mathrm{KD}}
+    +
+    \lambda_{\mathrm{spatial}}\mathcal{L}_{\mathrm{spatial}} .
+\end{equation}
+
+For V1, $\lambda_{\mathrm{spatial}}=0$. For V2 and V3, spatial KD is used only when it does not conflict with active masking. In the current implementation, spatial KD is disabled during masked epochs to avoid forcing the student to match clean teacher spatial features from an occluded input.
+
+\subsection{Runtime Video Evaluation}
+
+In addition to benchmark verification, we evaluate the trained encoder inside the full runtime pipeline. The pipeline detects faces with a YOLO-based detector, aligns faces when landmarks are available, extracts embeddings with the student model, and associates detections over time using DeepSORT or BoT-SORT \cite{deepsort,botsort}. Only observations that pass liveness and magnitude-based quality filtering are added to the track buffer. Accepted embeddings are aggregated by magnitude-weighted track-level pooling before FAISS-based retrieval \cite{faiss}.
+
+For runtime evaluation, we report processed frames, mean FPS, number of detections, accepted observations, recognized observations, and match rejection reasons. When annotated video tracks are available, we additionally report open-set identification metrics such as TPIR@FPIR, FNIR, misidentification rate, and unknown false-positive identification rate.
+
+\subsection{Compared Checkpoints}
+
+We compare five checkpoints:
+\begin{itemize}
+    \item \textbf{V1/latest}: clean KD checkpoint for clean-face deployment.
+    \item \textbf{V1/best}: checkpoint selected by best mean bin-protocol performance.
+    \item \textbf{V2/latest}: spatial-KD occlusion variant used as an ablation.
+    \item \textbf{V3/latest}: final robust checkpoint before SWA averaging.
+    \item \textbf{V3/SWA}: SWA-averaged checkpoint for masked or occluded deployment.
+\end{itemize}
+
+This comparison highlights the trade-off between clean verification accuracy and occlusion robustness. V1 is expected to perform best on clean benchmarks, while V3/SWA is expected to be more stable under lower-face occlusion. V2 is included as an ablation to analyze the effect of combining spatial KD with aggressive occlusion augmentation.
+
+
+\begin{table*}[h]
+\centering
+\caption{Evaluation protocols and metrics.}
+\label{tab:evaluation_protocols}
+\begin{tabular}{lll}
+\hline
+\textbf{Evaluation} & \textbf{Datasets / Protocols} & \textbf{Metrics} \\
+\hline
+Clean verification & LFW, CFP-FP, AgeDB-30 & Accuracy, mean accuracy \\
+Template verification & IJB-B, IJB-C & AUC, TAR@FAR \\
+Occlusion robustness & Masked verification protocols & TAR drop \\
+Runtime pipeline & Recorded or live video & FPS, accepted obs., recognized obs. \\
+Open-set video ID & Annotated video tracks & TPIR@FPIR, FNIR, MisIDR \\
+\hline
+\end{tabular}
+\end{table*}

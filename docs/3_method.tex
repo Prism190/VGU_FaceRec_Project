@@ -1,0 +1,73 @@
+\section{Method}
+
+\subsection{Overview}
+
+We propose an edge-oriented video face recognition system built around a lightweight student face encoder. The runtime pipeline consists of face detection, alignment, embedding extraction, tracking, liveness filtering, quality gating, track-level pooling, and identity retrieval. The main encoder is a MobileNetV4-Conv-Medium student distilled from a frozen MagFace iResNet-100 teacher. MobileNetV4 is selected for efficient mobile and edge inference \cite{mobilenetv4}, while MagFace is used because its feature magnitude is associated with face quality \cite{magface}. This allows the embedding norm to be used both as a training signal and as a quality cue during video inference.
+
+\subsection{Teacher-Student Architecture}
+
+The teacher is a frozen MagFace iResNet-100 model that outputs 512-dimensional face embeddings. The student is a smaller MobileNetV4-Conv-Medium model with the same 512-dimensional embedding size. The student consists of a MobileNetV4 backbone, a projection layer, and batch normalization. For variants that use spatial distillation, an additional $1 \times 1$ projection head aligns the student spatial feature map with the teacher feature map.
+
+During training, the teacher parameters are fixed. The teacher receives inputs in the range expected by the MagFace checkpoint, while the student receives normalized face crops. This design allows the student to learn a compact embedding space while preserving the representation structure of the stronger teacher.
+
+\subsection{Training Objective}
+
+The student is trained with supervised identity classification and teacher-guided embedding distillation. The overall loss is:
+\begin{equation}
+    \mathcal{L}
+    =
+    \lambda_{\mathrm{cls}}\mathcal{L}_{\mathrm{MagFace}}
+    +
+    \lambda_{\mathrm{kd}}\mathcal{L}_{\mathrm{KD}}
+    +
+    \lambda_{\mathrm{spatial}}\mathcal{L}_{\mathrm{spatial}} .
+\end{equation}
+
+Here, $\mathcal{L}_{\mathrm{MagFace}}$ is the MagFace classification loss, $\mathcal{L}_{\mathrm{KD}}$ is the embedding-level distillation loss, and $\mathcal{L}_{\mathrm{spatial}}$ is an optional spatial feature matching loss. ArcFace introduced additive angular margin learning for discriminative face embeddings \cite{arcface}, while MagFace extends margin-based face recognition by linking feature magnitude with face quality \cite{magface}. The main distillation term in this work is mean squared error between student and teacher embeddings, following the general idea of knowledge distillation from a large teacher to a compact student \cite{hinton2015distilling}\cite{relationalkd}.
+
+\subsection{Clean-Teacher and Augmented-Student Distillation}
+
+During training, the teacher receives the clean image, while the student receives an augmented version of the same image. This clean-teacher and augmented-student design encourages the student to produce teacher-like embeddings even when the input is degraded by masking or blur. This asymmetric input setup is shared by all training variants.
+
+Although the repository names the models as Phase 1, Phase 2, and Phase 3, they are not sequential fine-tuning stages. They are independently trained variants of the same teacher-student framework, each trained from scratch with a different augmentation and distillation policy.
+
+\subsection{Training Variants}
+
+We evaluate three independently trained variants.
+
+\textbf{V1: Clean KD baseline.}
+V1 focuses on clean-face recognition. It uses MagFace classification and embedding-level KD, without spatial KD. It applies only light lower-face masking after a clean warm-up period, making it suitable for clean access-control scenarios.
+
+\textbf{V2: Spatial KD with aggressive occlusion curriculum.}
+V2 adds spatial KD and a stronger occlusion curriculum, including lower-face masking, Gaussian blur, and motion blur. However, this variant exposes a failure case: the student may receive a masked input while being forced to match the teacher's clean spatial features. This creates contradictory supervision and makes V2 mainly useful as an ablation.
+
+\textbf{V3: SWA-stabilized robust variant.}
+V3 targets masked or partially occluded faces. It uses a milder occlusion curriculum and applies stochastic weight averaging near the end of training. SWA averages weights along the training trajectory and can improve generalization by finding flatter solutions \cite{izmailov2019averagingweightsleadswider}. To avoid the spatial-KD conflict, spatial feature matching is disabled when mask augmentation is active.
+
+\subsection{Runtime Face Processing}
+
+At runtime, faces are detected using a YOLO-based detector\cite{yolo11_ultralytics}. When valid five-point landmarks are available, each face is aligned to a canonical $112 \times 112$ template. Accurate face localization and landmark-based alignment are important for robust face recognition, as shown by RetinaFace \cite{retinaface}. If reliable landmarks are not available, the system falls back to a bounding-box crop instead of applying affine alignment with synthetic landmarks. This avoids distorted crops caused by inaccurate landmark estimates.
+
+The detector also applies an additional cross-class non-maximum suppression step to merge duplicate detections of the same face. This reduces track fragmentation when multiple overlapping detections are produced for one person.
+
+\subsection{Tracking, Liveness, and Quality Filtering}
+
+After embedding extraction, detections are associated across frames using a tracking backend. The system supports DeepSORT, BoT-SORT, and a Hungarian matching fallback. DeepSORT improves SORT by adding an appearance association metric \cite{deepsort}, while BoT-SORT further strengthens motion and appearance association \cite{botsort}.
+
+Each tracked observation is then passed through liveness and quality filtering. Liveness detection is included because face recognition systems are vulnerable to presentation attacks such as printed photos and replayed videos. RGB-based anti-spoofing remains an important deployment challenge \cite{ming2020surveyantispoofingmethodsface}. In our pipeline, an embedding is added to the track buffer only if the observation is classified as live and its embedding magnitude lies within the accepted quality range.
+
+\subsection{Track-Level Pooling and Retrieval}
+
+Instead of recognizing each frame independently, the system aggregates accepted embeddings over a track. Each embedding is stored with its MagFace magnitude, and the final track representation is computed by magnitude-weighted pooling followed by $\ell_2$ normalization. This gives higher weight to clearer and more reliable observations.
+
+The pooled track embedding is compared with a known identity gallery using FAISS HNSW when available, with cosine-similarity fallback otherwise. FAISS enables efficient similarity search over high-dimensional embeddings \cite{faiss}. A match is accepted only if the top similarity score exceeds a threshold and the margin between the top identity and the second identity is sufficiently large. This conservative rule reduces false matches in open-set scenarios.
+
+\subsection{Unknown Identity Grouping}
+
+If a track cannot be matched to a known identity, the system groups it as an unknown identity based on embedding similarity. A track is assigned to an existing unknown group if the similarity is high enough; otherwise, a new group is created. This is related to density-based clustering methods such as DBSCAN, which can discover clusters without knowing the number of identities in advance \cite{dbscan}.
+
+The pipeline stores unknown-group metadata, including track IDs, frame range, prototype statistics, and sample face crops for later review. It can also optionally auto-register an unknown identity into the live index if the track satisfies minimum length and quality requirements.
+
+\subsection{Summary}
+
+Overall, the proposed method combines lightweight model distillation with a practical video recognition pipeline. During training, a MobileNetV4 student learns from a frozen MagFace teacher through MagFace classification and embedding-level KD. During deployment, the student is integrated with detection, alignment, tracking, liveness filtering, magnitude-based quality gating, track-level pooling, FAISS retrieval, and unknown identity grouping. This design addresses both edge efficiency and real-world video recognition stability.

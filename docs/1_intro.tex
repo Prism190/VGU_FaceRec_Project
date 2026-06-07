@@ -1,0 +1,39 @@
+\section{Introduction}
+Face recognition systems are increasingly deployed in real-world video scenarios such as access control, surveillance, and attendance monitoring. Although modern deep face recognition models achieve strong accuracy on standard benchmarks, they are often too computationally expensive for edge deployment and are usually evaluated under image-level settings. Practical video-based recognition requires not only an accurate embedding model, but also robust detection, alignment, tracking, liveness filtering, quality control, and identity retrieval.
+
+This work presents a lightweight video face recognition pipeline based on a MobileNetV4-Conv-Medium student distilled from a frozen MagFace iResNet-100 teacher\cite{magface}. The student learns 512-dimensional face embeddings using a combination of MagFace classification loss and embedding-level knowledge distillation\cite{relationalkd,hinton2015distilling}. To study the trade-off between clean accuracy and robustness, we evaluate three independently trained variants of the same teacher-student framework: a clean KD baseline, a spatial-KD variant with aggressive occlusion curriculum, and an SWA-stabilized variant designed for occluded faces\cite{izmailov2019averagingweightsleadswider}. These variants are not sequential training stages; each is trained from scratch under a different objective and augmentation policy.
+
+The distilled model is integrated into an end-to-end runtime pipeline consisting of YOLO-based face detection, 5-point alignment, tracking, liveness filtering, MagFace magnitude-based quality gating, magnitude-weighted track pooling, and FAISS-based identity retrieval\cite{faiss,yolo1,yolo11_ultralytics}. This design allows the system to exploit temporal information from video rather than relying on single-frame predictions. Experimental results show that the clean KD variant provides the best low-FAR verification performance on clean faces, while the SWA-based robust variant reduces degradation under lower-face occlusion. The proposed system therefore provides a practical trade-off between recognition accuracy, robustness, and deployment efficiency for edge-oriented face recognition.
+
+\begin{figure*}[t]
+    \centering
+
+    \begin{subfigure}[t]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{fig/sample_1.png}
+        \caption{All visible subjects are correctly recognized by the system.}
+        \label{fig:qual_all_recognized}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{fig/sample_2.png}
+        \caption{The system maintains recognition under partial face occlusion.}
+        \label{fig:qual_partial_occlusion}
+    \end{subfigure}
+    \hfill
+    \begin{subfigure}[t]{0.32\textwidth}
+        \centering
+        \includegraphics[width=\linewidth]{fig/sample_3.png}
+        \caption{A heavily occluded face wearing a VR headset is rejected as unknown.}
+        \label{fig:qual_vr_unknown}
+    \end{subfigure}
+
+    \caption{
+        Qualitative examples of the proposed video face recognition pipeline.
+        Green boxes indicate accepted recognized identities, while the yellow box indicates an unknown identity.
+        The examples show that the pipeline can recognize visible faces, remain stable under partial occlusion,
+        and reject a heavily occluded face when the visual evidence is insufficient for reliable identification.
+    }
+    \label{fig:qualitative_pipeline_examples}
+\end{figure*}

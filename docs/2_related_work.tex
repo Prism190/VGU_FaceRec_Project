@@ -1,0 +1,42 @@
+\section{Related Work}
+\subsection{Face Recognition}
+
+Deep face recognition has achieved strong performance through discriminative embedding learning. Instead of directly comparing raw images, modern systems learn compact face embeddings in which samples from the same identity are close together and samples from different identities are separated. Margin-based softmax losses have played an important role in this progress. CosFace introduces an additive cosine margin in the normalized feature space, while ArcFace applies an additive angular margin to enforce stronger inter-class separation with a clear geometric interpretation\cite{cosface}\cite{arcface}. These methods have become standard objectives for face verification and identification.
+
+MagFace further extends margin-based face recognition by associating feature magnitude with face quality\cite{magface}. In MagFace, high-quality face samples are encouraged to produce embeddings with larger magnitude, while low-quality or ambiguous samples tend to have smaller magnitude. This is useful not only during training but also during deployment, because embedding magnitude can be used as a quality indicator. Our system follows this idea by using a MagFace iResNet-100 model as the teacher and by using embedding magnitude for quality filtering and track-level pooling in the video pipeline.
+
+\subsection{Lightweight Face Recognition and Edge Deployment}
+
+Although large face recognition models can achieve high accuracy, they are often too expensive for edge devices or real-time video applications. This has motivated the development of lightweight architectures such as MobileFaceNets and MobileNet-based models. These networks reduce parameter count and computational cost while attempting to preserve recognition accuracy\cite{mobilefacenets}.
+
+MobileNetV4 continues this direction by providing efficient building blocks designed for mobile and edge hardware\cite{mobilenetv4}. In this work, MobileNetV4-Conv-Medium is used as the student backbone. However, training a compact model only with classification supervision may not be sufficient to match the representation quality of larger models. Therefore, our approach combines the efficiency of MobileNetV4 with knowledge distillation from a stronger MagFace teacher.
+
+\subsection{Knowledge Distillation for Face Embeddings}
+
+Knowledge distillation transfers knowledge from a large teacher model to a smaller student model. In the original formulation, the student learns from the softened output distribution of the teacher. For face recognition, however, the final embedding space is more important than the class probability distribution, especially because recognition is usually performed through similarity comparison rather than direct classification.
+
+Therefore, distillation for face recognition can be applied at the embedding level, where the student is encouraged to match the teacher's feature representation. Some works also explore relational distillation, where pairwise distances or angular relations between samples are transferred. In our system, the main distillation signal is embedding-level knowledge distillation from a frozen MagFace iResNet-100 teacher to a MobileNetV4 student. The student is also trained with a MagFace classification head, allowing it to learn both supervised identity separation and teacher-guided embedding structure\cite{relationalkd}\cite{magface}\cite{mobilenetv4}.
+
+\subsection{Occlusion Robustness and Face Quality}
+
+Real-world face recognition often suffers from partial occlusion, pose variation, blur, illumination changes, and low-quality frames. Occlusion is especially challenging because important facial regions may be missing, while the model may still produce confident but unreliable embeddings. This issue becomes more serious in video scenarios, where only some frames may contain a clear frontal face.
+
+To address this, many systems use data augmentation or quality-aware filtering. In our work, the training variants explore different occlusion strategies, including lower-face masking, Gaussian blur, and motion blur. The robust variant uses a milder occlusion curriculum combined with stochastic weight averaging to improve stability under masked or partially occluded conditions\cite{izmailov2019averagingweightsleadswider}. At inference time, embedding magnitude is used as a quality signal, so low-quality observations can be filtered before being added to the track-level representation.
+
+\subsection{Video Face Recognition Pipelines}
+
+A practical video face recognition system requires more than a face embedding model. It must first detect faces, align them, extract embeddings, associate detections across frames, filter unreliable observations, and finally retrieve the closest identity from a gallery. Face alignment is particularly important because poorly aligned crops can significantly reduce verification accuracy. Landmark-based alignment, such as 5-point affine alignment, is commonly used to normalize face images before feature extraction.
+
+Tracking is also important in video-based recognition. Methods such as DeepSORT and BoT-SORT maintain identity consistency across frames by combining motion and appearance cues\cite{deepsort}\cite{botsort}. In our system, tracking is used not only to reduce identity flickering but also to collect multiple embeddings from the same person over time. Instead of making a recognition decision from a single frame, the system performs track-level pooling, which makes the final identity decision more stable.
+
+\subsection{Retrieval, Open-Set Recognition, and Unknown Grouping}
+
+After extracting a face embedding, recognition is usually performed by comparing it against a gallery of known identities. For small galleries, direct cosine similarity is sufficient, but larger galleries benefit from approximate nearest-neighbor search. FAISS is commonly used for efficient vector retrieval and is suitable for large-scale embedding search\cite{faiss}.
+
+Real deployment also requires open-set behavior, where the system must decide whether a face belongs to a known identity or should be treated as unknown. Our pipeline uses threshold-based retrieval with a top-1 score and top-1/top-2 margin check to reduce false matches. If a face cannot be matched to a known identity, the system can group unknown tracks based on embedding similarity. This allows repeated appearances of the same unknown person to be clustered and reviewed later.
+
+\subsection{Face Anti-Spoofing and Liveness Detection}
+
+Face recognition systems used for authentication or access control are vulnerable to presentation attacks such as printed photos, replayed videos, or screen-based attacks. Therefore, liveness detection is an important component of a complete deployment pipeline. However, face anti-spoofing is a difficult problem because performance depends heavily on the attack type, camera domain, and availability of real presentation-attack data.
+
+In our system, liveness detection is treated as a gate before embeddings are accepted into the track buffer. Only observations that pass both liveness filtering and quality filtering are used for track-level pooling and identity retrieval. This design reduces the risk that spoofed or low-quality frames corrupt the recognition decision, while keeping the anti-spoofing component modular so that stronger PAD models can be integrated later\cite{ming2020surveyantispoofingmethodsface}.

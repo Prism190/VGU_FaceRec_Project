@@ -1,0 +1,17 @@
+\section{Conclusion}
+
+This work presents an edge-oriented video face recognition system based on a lightweight MobileNetV4 student distilled from a frozen MagFace iResNet-100 teacher. The proposed system combines MagFace classification, embedding-level knowledge distillation, and a complete runtime pipeline with detection, tracking, liveness filtering, magnitude-based quality gating, track-level pooling, and FAISS-based retrieval\cite{mobilenetv4}\cite{relationalkd}\cite{hinton2015distilling}\cite{faiss}\cite{botsort}\cite{deepsort}.
+
+We evaluate three independently trained variants rather than sequential training phases. The results show that V1 is the best choice for clean-face verification, especially under strict low-FAR IJB evaluation, while V3/SWA provides better robustness under lower-face occlusion. V2 serves as an important ablation, showing that aggressive occlusion training combined with spatial KD can hurt performance when the student receives masked inputs but is forced to match clean teacher spatial features\cite{izmailov2019averagingweightsleadswider}\cite{ijbb}\cite{ijbc}\cite{faiss}.
+
+Overall, the study highlights a practical trade-off between clean accuracy and occlusion robustness. For controlled access-control scenarios, the clean KD variant is preferred. For environments with masks or partial occlusion, the SWA-stabilized robust variant is more suitable. Future work will focus on stronger anti-spoofing evaluation, real open-set video benchmarks, and further optimization for real-time edge deployment.
+
+\section{Limitations}
+
+This work has several limitations. First, the runtime video pipeline has not yet been evaluated on a standardized large-scale open-set video benchmark. Although the system records runtime statistics such as FPS, accepted observations, recognized observations, and match rejection reasons, a more complete evaluation with annotated video tracks is needed to measure TPIR, FPIR, FNIR, and identity switches.
+
+Second, the anti-spoofing component is treated as a modular liveness gate rather than a fully optimized presentation attack detection system. Its effectiveness depends on the selected PAD model and the availability of real spoofing datasets. Therefore, stronger evaluation on real presentation attack protocols is required before deployment in high-security authentication scenarios.
+
+Third, the occlusion robustness evaluation is based on synthetic lower-face masking. While this protocol is useful for controlled comparison, it does not fully represent real-world occlusions such as masks with different shapes, hands, scarves, extreme pose, motion blur, or low-resolution surveillance footage.
+
+Finally, the three training variants are practical configuration-level ablations rather than fully isolated single-factor experiments. Since spatial KD, occlusion strength, and SWA differ across variants, future work should isolate each factor more carefully to quantify its individual contribution.
