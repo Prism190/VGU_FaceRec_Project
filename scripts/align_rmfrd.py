@@ -51,6 +51,9 @@ def _align_one(
     """Detect, align, and save. Falls back to resize if detection fails."""
     out_path.parent.mkdir(parents=True, exist_ok=True)
 
+    if out_path.exists():
+        return
+
     img_bgr = cv2.imread(str(img_path))
     if img_bgr is None:
         img_pil = Image.open(img_path).convert("RGB")

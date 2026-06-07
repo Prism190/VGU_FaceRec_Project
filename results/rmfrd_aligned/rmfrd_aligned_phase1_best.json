@@ -1,0 +1,15 @@
+{
+  "model": "Student_Phase1_Best_aligned",
+  "dataset": "RMFRD",
+  "num_paired_identities": 403,
+  "num_gallery_images": 4029,
+  "num_probe_images": 1945,
+  "num_positive_pairs": 1945,
+  "num_negative_pairs": 9725,
+  "gallery_per_id": 10,
+  "roc_auc": 0.8266164246865936,
+  "rank1_identification": 0.22005141388174806,
+  "tar_far_1e-3": 0.1506426735218509,
+  "tar_far_1e-4": 0.05089974293059126,
+  "tar_far_1e-5": 0.05089974293059126
+}

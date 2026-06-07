@@ -155,20 +155,26 @@ To evaluate robustness on real masked faces beyond synthetic lower-face masking,
 
 \begin{table}[h]
 \centering
-\caption{Real-world masked face recognition on RMFRD (403 paired identities, RetinaFace-aligned).}
+\caption{Real-world masked face recognition on RMFRD (403 paired identities, RetinaFace-aligned). Gallery: mean of up to 10 clean images per identity. Probe: 1,945 real masked images. Fallback bilinear resize for 7.9\% of masked images where RetinaFace detected no face. Unaligned reference: MBF 68.72\% AUC / 7.25\% Rank-1; V1/best 71.02\% / 4.78\%; V3/SWA 69.90\% / 6.84\%.}
 \label{tab:rmfrd}
-\begin{tabular}{lcccc}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lccc}
 \hline
 \textbf{Model} & \textbf{AUC} & \textbf{TAR@$10^{-3}$} & \textbf{Rank-1} \\
 \hline
-MobileFaceNet (W600K) & — & — & — \\
-Student: V1/latest & — & — & — \\
-Student: V3/SWA & — & — & — \\
+MobileFaceNet (W600K) & 85.55 & 26.43 & 36.56 \\
+Student: V1/best & 82.66 & 15.06 & 22.01 \\
+Student: V3/SWA & \textbf{84.18} & \textbf{15.68} & \textbf{23.03} \\
 \hline
 \end{tabular}
+}
 \end{table}
 
-(Results from the RetinaFace-aligned RMFRD evaluation are pending; table will be updated. Reference unaligned results: MBF 68.72\% AUC / 7.25\% Rank-1; V1 71.02\% / 4.78\%; V3/SWA 69.90\% / 6.84\%. Aligned numbers are expected to be substantially higher and more meaningful, as simple resize from unaligned crops suppresses all models uniformly.)
+The alignment step is critical for meaningful evaluation. Without alignment, all models use simple bilinear resize, which suppresses discriminative facial features: MBF achieves only 68.72\% AUC / 7.25\% Rank-1 on unaligned crops but reaches 85.55\% AUC / 36.56\% Rank-1 after RetinaFace alignment — an improvement of $+16.8\%$ AUC and $+29.3$ Rank-1 points. This confirms that the RMFRD raw images are not pre-aligned and that any meaningful comparison must use landmark-based preprocessing.
+
+Among the student models, V3/SWA (84.18\% AUC, 23.03\% Rank-1) outperforms V1/best (82.66\% AUC, 22.01\% Rank-1) on real masked probes, confirming that the occlusion curriculum and SWA stabilization generalize beyond synthetic lower-face masking to real-world masks. This RMFRD result directly complements the synthetic masking ablation (Table~\ref{tab:occlusion_results}): just as V3/SWA shows smaller TAR drop on synthetic occlusion, it also achieves higher AUC and Rank-1 on real masked faces.
+
+MobileFaceNet (W600K), despite its smaller parameter count (1M vs.\ 9.58M), outperforms both student variants on this dataset (85.55\% AUC, 36.56\% Rank-1). We attribute this primarily to the significantly larger training set: MBF is trained on WebFace600K with $\sim$600K identities, while our student uses MS1M-RetinaFace with $\sim$85K identities (7$\times$ fewer). Additionally, the RMFRD dataset predominantly features Asian celebrities, who may be more represented in WebFace600K than in MS1M. This suggests that the student's IJB advantage does not fully translate to this particular domain, highlighting the importance of training data diversity for cross-domain robustness.
 
 \subsection{Runtime Pipeline Results}
 

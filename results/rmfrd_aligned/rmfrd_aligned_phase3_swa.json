@@ -1,0 +1,15 @@
+{
+  "model": "Student_Phase3_SWA_aligned",
+  "dataset": "RMFRD",
+  "num_paired_identities": 403,
+  "num_gallery_images": 4029,
+  "num_probe_images": 1945,
+  "num_positive_pairs": 1945,
+  "num_negative_pairs": 9725,
+  "gallery_per_id": 10,
+  "roc_auc": 0.8418188354557529,
+  "rank1_identification": 0.23033419023136248,
+  "tar_far_1e-3": 0.15681233933161953,
+  "tar_far_1e-4": 0.0442159383033419,
+  "tar_far_1e-5": 0.0442159383033419
+}

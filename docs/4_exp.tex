@@ -54,6 +54,32 @@ The shared training objective is:
 
 For V1, $\lambda_{\mathrm{spatial}}=0$. For V2 and V3, spatial KD is used only when it does not conflict with active masking. In the current implementation, spatial KD is disabled during masked epochs to avoid forcing the student to match clean teacher spatial features from an occluded input.
 
+\subsection{Augmentation Parameters}
+
+Table~\ref{tab:aug_params} details the exact augmentation schedule for each variant. The lower-face mask always covers the bottom 45\% of the $112\times 112$ image (all pixels with row index $\ge 0.55 \times 112 = 61$), filled with zeros. For V2 and V3, all probabilities and sigma values are linearly ramped from their start to end values between epochs 10 and 25, then held constant. All augmentations are applied only to the student input; the teacher always receives the clean image. Horizontal flip ($p = 0.50$) is applied uniformly across all variants.
+
+\begin{table}[h]
+\centering
+\caption{Occlusion augmentation parameters per training variant. V2 uses aggressive blur; V3 uses milder blur. ``—'' = not used.}
+\label{tab:aug_params}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{llll}
+\hline
+\textbf{Parameter} & \textbf{V1} & \textbf{V2} & \textbf{V3} \\
+\hline
+Clean epochs (no aug) & 20 & 10 & 10 \\
+Mask prob (ramp start$\to$end) & 0.10 (static) & 0.10$\to$0.30 & 0.10$\to$0.30 \\
+Mask ramp epochs & ep.~20--40 & ep.~10--25 & ep.~10--25 \\
+Gaussian blur prob & 0 & 0.25$\to$0.75 & 0.25$\to$0.75 \\
+Gaussian $\sigma$ & — & 1.0$\to$2.8 & 1.0$\to$1.5 \\
+Gaussian kernel size (odd) & — & 5--11 & 5--11 \\
+Motion blur prob & 0 & 0.10$\to$0.55 & 0.10$\to$0.55 \\
+Motion kernel size (odd) & — & 7--17 & 5--9 \\
+\hline
+\end{tabular}
+}
+\end{table}
+
 \subsection{Runtime Video Evaluation}
 
 In addition to benchmark verification, we evaluate the trained encoder inside the full runtime pipeline. The pipeline detects faces with a YOLO-based detector, aligns faces when landmarks are available, extracts embeddings with the student model, and associates detections over time using DeepSORT or BoT-SORT \cite{deepsort,botsort}. Only observations that pass liveness and magnitude-based quality filtering are added to the track buffer. Accepted embeddings are aggregated by magnitude-weighted track-level pooling before FAISS-based retrieval \cite{faiss}.
@@ -62,16 +88,17 @@ For runtime evaluation, we report processed frames, mean FPS, number of detectio
 
 \subsection{Compared Checkpoints}
 
-We compare five checkpoints:
+We compare six checkpoints. All variants use the same concept of "latest" (final epoch) and "best" (epoch with highest mean TAR@$10^{-4}$ on validation bin protocols):
 \begin{itemize}
-    \item \textbf{V1/latest}: clean KD checkpoint for clean-face deployment.
-    \item \textbf{V1/best}: checkpoint selected by best mean bin-protocol performance.
-    \item \textbf{V2/latest}: spatial-KD occlusion variant used as an ablation.
-    \item \textbf{V3/latest}: final robust checkpoint before SWA averaging.
-    \item \textbf{V3/SWA}: SWA-averaged checkpoint for masked or occluded deployment.
+    \item \textbf{V1/latest}: final-epoch clean KD checkpoint; recommended for clean-face deployment.
+    \item \textbf{V1/best}: epoch with best mean bin-protocol TAR@$10^{-4}$ across LFW/CFP/AgeDB.
+    \item \textbf{V2/latest}: final-epoch spatial-KD occlusion variant; used as an ablation.
+    \item \textbf{V3/best}: best-epoch robust variant before SWA averaging.
+    \item \textbf{V3/latest}: final-epoch robust variant before SWA averaging.
+    \item \textbf{V3/SWA}: SWA-averaged checkpoint; recommended for masked or occluded deployment.
 \end{itemize}
 
-This comparison highlights the trade-off between clean verification accuracy and occlusion robustness. V1 is expected to perform best on clean benchmarks, while V3/SWA is expected to be more stable under lower-face occlusion. V2 is included as an ablation to analyze the effect of combining spatial KD with aggressive occlusion augmentation.
+This comparison highlights the trade-off between clean verification accuracy and occlusion robustness. V1 is expected to perform best on clean benchmarks, while V3/SWA is expected to be more stable under lower-face occlusion. V2 is included as an ablation to analyze the effect of combining spatial KD with aggressive occlusion augmentation. The V1/latest and V3/SWA checkpoints are the recommended deployment models; the remaining rows are included for completeness.
 
 
 \begin{table*}[h]

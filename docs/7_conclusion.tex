@@ -15,3 +15,11 @@ Second, the anti-spoofing component is treated as a modular liveness gate rather
 Third, the occlusion robustness evaluation is based on synthetic lower-face masking. While this protocol is useful for controlled comparison, it does not fully represent real-world occlusions such as masks with different shapes, hands, scarves, extreme pose, motion blur, or low-resolution surveillance footage.
 
 Finally, the three training variants are practical configuration-level ablations rather than fully isolated single-factor experiments. Since spatial KD, occlusion strength, and SWA differ across variants, future work should isolate each factor more carefully to quantify its individual contribution.
+
+\section{Broader Impact and Ethical Considerations}
+
+Face recognition technology carries important ethical implications that must be acknowledged. First, regarding privacy: the deployment of automated face recognition in public or semi-public environments raises privacy concerns, especially without the knowledge or consent of the individuals being recognized. We recommend that any deployment of this system respect applicable data protection regulations (e.g., GDPR) and obtain explicit consent from subjects whenever feasible.
+
+Second, regarding demographic fairness: training datasets for face recognition, including MS1M, are known to have demographic imbalances in terms of age, gender, and ethnicity. We did not conduct demographic subgroup analyses in this work. It is plausible that performance varies across demographic groups, and such disparities could amplify existing biases in access-control contexts. Future work should evaluate recognition accuracy disaggregated by demographic subgroup and apply appropriate debiasing strategies.
+
+Third, regarding misuse: the pipeline described in this work is intended for controlled access-control scenarios (e.g., office or campus entry systems). Deployment in mass surveillance, tracking of individuals without consent, or any scenario that infringes on civil liberties is not intended and is strongly discouraged. The open-set unknown-identity grouping feature, in particular, should not be used to build covert profiles of private individuals.

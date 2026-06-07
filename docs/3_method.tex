@@ -56,6 +56,8 @@ After embedding extraction, detections are associated across frames using a trac
 
 Each tracked observation is then passed through liveness and quality filtering. Liveness detection is included because face recognition systems are vulnerable to presentation attacks such as printed photos and replayed videos. RGB-based anti-spoofing remains an important deployment challenge \cite{ming2020surveyantispoofingmethodsface}. In our pipeline, an embedding is added to the track buffer only if the observation is classified as live and its embedding magnitude lies within the accepted quality range.
 
+The anti-spoofing module uses MiniFASNet (the Silent-Face anti-spoofing library, V1/V2 variants), a lightweight 1.8M-parameter model operating on multi-scale face crops. It is treated as a modular plug-in gate: any frame classified as non-live is discarded before embedding extraction. A controlled ablation of the PAD component (end-to-end identification accuracy with vs. without PAD) is not included in this study because the system lacks a standardized video dataset with labeled presentation attacks; this remains a limitation and a direction for future work.
+
 \subsection{Track-Level Pooling and Retrieval}
 
 Instead of recognizing each frame independently, the system aggregates accepted embeddings over a track. Each embedding is stored with its MagFace magnitude, and the final track representation is computed by magnitude-weighted pooling followed by $\ell_2$ normalization. This gives higher weight to clearer and more reliable observations.

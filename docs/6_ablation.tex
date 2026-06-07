@@ -167,27 +167,27 @@ To validate our use of magnitude-weighted template pooling, we compare four pool
 
 \begin{table*}[h]
 \centering
-\caption{Template pooling ablation on IJB-B/C. TAR at FAR=$10^{-4}$ is the primary metric for access control.}
+\caption{Template pooling ablation on IJB-B/C. TAR at FAR=$10^{-4}$ is the primary metric for access control. All rows use the same checkpoint per model (V1/best = \texttt{phase1\_best.pt}; V3/SWA = SWA-averaged checkpoint). ``—'' = pending.}
 \label{tab:pooling_ablation}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{llcccccc}
 \hline
 \textbf{Model} & \textbf{Pool} & \textbf{IJBB AUC} & \textbf{IJBB TAR@$10^{-3}$} & \textbf{IJBB TAR@$10^{-4}$} & \textbf{IJBC AUC} & \textbf{IJBC TAR@$10^{-3}$} & \textbf{IJBC TAR@$10^{-4}$} \\
 \hline
-V1/latest & mean             & 99.38 & 92.91 & 86.61 & 99.55 & 94.40 & 89.13 \\
-V1/latest & magface\_weighted & 99.12 & 93.51 & \textbf{87.98} & 99.37 & 94.87 & \textbf{90.65} \\
-V1/latest & top5             & — & — & — & — & — & — \\
-V1/latest & top10            & — & — & — & — & — & — \\
-V3/SWA    & mean             & 99.20 & 92.23 & 85.11 & 99.32 & 93.51 & 87.74 \\
-V3/SWA    & magface\_weighted & 99.19 & 92.23 & \textbf{85.27} & 99.30 & 93.54 & \textbf{87.77} \\
-V3/SWA    & top5             & — & — & — & — & — & — \\
-V3/SWA    & top10            & — & — & — & — & — & — \\
+V1/best & mean             & 99.38 & 92.91 & 86.61 & 99.55 & 94.40 & 89.13 \\
+V1/best & magface\_weighted & 99.38 & 93.01 & \textbf{86.88} & 99.54 & 94.51 & \textbf{89.50} \\
+V1/best & top5             & — & — & — & — & — & — \\
+V1/best & top10            & — & — & — & — & — & — \\
+V3/SWA  & mean             & 99.20 & 92.23 & 85.11 & 99.32 & 93.51 & 87.74 \\
+V3/SWA  & magface\_weighted & 99.19 & 92.23 & \textbf{85.27} & — & — & — \\
+V3/SWA  & top5             & — & — & — & — & — & — \\
+V3/SWA  & top10            & — & — & — & — & — & — \\
 \hline
 \end{tabular}
 }
 \end{table*}
 
-Mean pooling produces slightly higher AUC overall but underperforms \texttt{magface\_weighted} at strict FAR ($10^{-4}$), the operating point relevant for access control. \texttt{magface\_weighted} wins by 1.37\% on V1/latest IJB-B and 1.52\% on V1/latest IJB-C at TAR@$10^{-4}$. This validates the design choice: quality-weighting by embedding norm consistently prioritizes higher-quality face observations and achieves better calibration at low FAR. (top5/top10 results pending from the running ablation.)
+Mean pooling produces slightly higher AUC overall but underperforms \texttt{magface\_weighted} at strict FAR ($10^{-4}$), the operating point relevant for access control. For V1/best on IJB-B, \texttt{magface\_weighted} gains 0.27\% over mean (86.88\% vs.\ 86.61\%) at TAR@$10^{-4}$; on IJB-C the gain is 0.37\% (89.50\% vs.\ 89.13\%). For V3/SWA on IJB-B, the gain is 0.16\% (85.27\% vs.\ 85.11\%). This validates the design choice: quality-weighting by embedding norm consistently prioritizes higher-quality face observations and achieves better calibration at low FAR. (V3/SWA IJBC magface\_weighted and top5/top10 results are pending from the running ablation. The V1/latest checkpoint achieves 87.98\% IJBB TAR@$10^{-4}$ with \texttt{magface\_weighted}, reported in Table~\ref{tab:ijb_results}.)
 
 \subsection{Ablation Summary}
 
