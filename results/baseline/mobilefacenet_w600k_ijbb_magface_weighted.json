@@ -1,0 +1,15 @@
+{
+  "model": "MobileFaceNet_W600K",
+  "protocol": "ijbb",
+  "template_pooling": "magface_weighted",
+  "num_faces": 227630,
+  "num_templates": 12115,
+  "num_pairs_total": 8010270,
+  "num_pairs_scored": 8010270,
+  "missing_face_images": 0,
+  "roc_auc": 0.9919833523490751,
+  "num_scores_non_finite": 0,
+  "tar_far_1e-3": 0.9392405063291139,
+  "tar_far_1e-4": 0.894157740993184,
+  "tar_far_1e-5": 0.8133398247322298
+}

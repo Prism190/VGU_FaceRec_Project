@@ -1,0 +1,15 @@
+{
+  "model": "Student_Phase1_Best",
+  "dataset": "RMFRD",
+  "num_paired_identities": 403,
+  "num_gallery_images": 4029,
+  "num_probe_images": 1945,
+  "num_positive_pairs": 1945,
+  "num_negative_pairs": 9725,
+  "gallery_per_id": 10,
+  "roc_auc": 0.7102026552824791,
+  "rank1_identification": 0.04781491002570694,
+  "tar_far_1e-3": 0.02622107969151671,
+  "tar_far_1e-4": 0.0015424164524421595,
+  "tar_far_1e-5": 0.0015424164524421595
+}

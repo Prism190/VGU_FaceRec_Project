@@ -125,7 +125,28 @@ print()
 
 # ─── 4. RMFRD masked face evaluation ────────────────────────────────────────
 print("=" * 80)
-print("TABLE 4: Real-world masked face recognition (RMFRD / AFDB) — 403 paired identities")
+print("TABLE 4a: RMFRD — RetinaFace-aligned (primary results)")
+print("=" * 80)
+rmfrd_aligned_dir = PROJECT_ROOT / "results" / "rmfrd_aligned"
+
+rmfrd_aligned_models = [
+    ("MobileFaceNet W600K", "rmfrd_aligned_mobilefacenet_w600k.json"),
+    ("Student Phase1/best", "rmfrd_aligned_phase1_best.json"),
+    ("Student Phase3/SWA",  "rmfrd_aligned_phase3_swa.json"),
+]
+
+print(f"{'Model':<28} {'AUC':>7} {'TAR@1e-3':>9} {'TAR@1e-4':>9} {'Rank-1':>7}")
+print("-" * 65)
+for label, fname in rmfrd_aligned_models:
+    d = _load(rmfrd_aligned_dir / fname)
+    if d:
+        print(f"{label:<28} {_pct(d.get('roc_auc')):>7} {_pct(d.get('tar_far_1e-3')):>9} {_pct(d.get('tar_far_1e-4')):>9} {_pct(d.get('rank1_identification')):>7}")
+    else:
+        print(f"{label:<28} {'[pending]':>35}")
+print()
+
+print("=" * 80)
+print("TABLE 4b: RMFRD — Unaligned / simple resize (reference, not primary)")
 print("=" * 80)
 rmfrd_dir = PROJECT_ROOT / "results" / "rmfrd"
 
