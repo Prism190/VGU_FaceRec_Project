@@ -72,9 +72,9 @@ class DistillationObjective(nn.Module):
         if self.lambda_rkd_angle > 0.0:
             rkd_a = rkd_angle_loss(student_embeddings, teacher_embeddings)
 
-        if spatial_w > 0.0:
-            if student_spatial is None or teacher_spatial is None:
-                raise ValueError("Spatial KD weight > 0 but student/teacher spatial features were not provided")
+        if spatial_w > 0.0 and student_spatial is not None and teacher_spatial is not None:
+            # spatial features are None when training engine gates spatial KD off
+            # (e.g. masking epochs in Phase 4 Bug #11 fix) — silently skip in that case
             if student_spatial.shape != teacher_spatial.shape:
                 raise ValueError(
                     "Spatial KD requires matching BCHW feature maps, got "

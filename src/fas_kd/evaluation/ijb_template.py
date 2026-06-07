@@ -124,13 +124,21 @@ def _pool_magface_weighted(features: np.ndarray) -> np.ndarray:
     return weighted.astype(np.float32)
 
 
+def _pool_top_k(features: np.ndarray, k: int = 5) -> np.ndarray:
+    feats = np.nan_to_num(features, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32, copy=False)
+    norms = np.linalg.norm(feats, axis=1)
+    top_idx = np.argsort(norms)[-min(k, len(norms)):]
+    pooled = feats[top_idx].mean(axis=0)
+    return np.nan_to_num(pooled, nan=0.0, posinf=0.0, neginf=0.0).astype(np.float32)
+
+
 def _build_template_features(
     face_tids: np.ndarray,
     face_mids: np.ndarray,
     face_embeddings: np.ndarray,
     pooling_mode: str = "mean",
 ) -> dict[int, np.ndarray]:
-    if pooling_mode not in {"mean", "magface_weighted"}:
+    if pooling_mode not in {"mean", "magface_weighted", "top5", "top10"}:
         raise ValueError(f"Unsupported pooling mode: {pooling_mode}")
 
     template_features: dict[int, np.ndarray] = {}
@@ -147,6 +155,10 @@ def _build_template_features(
             mid_feats = feats[m_idx]
             if pooling_mode == "magface_weighted":
                 m_feat = _pool_magface_weighted(mid_feats)
+            elif pooling_mode in ("top5", "top10"):
+                k = 5 if pooling_mode == "top5" else 10
+                m_feat = _pool_top_k(mid_feats, k=k)
+                m_feat = m_feat / (np.linalg.norm(m_feat) + 1e-12)
             else:
                 m_feat = _pool_mean(mid_feats)
                 m_feat = m_feat / (np.linalg.norm(m_feat) + 1e-12)
@@ -155,6 +167,9 @@ def _build_template_features(
         media_stack = np.stack(media_embeddings, axis=0)
         if pooling_mode == "magface_weighted":
             t_feat = _pool_magface_weighted(media_stack)
+        elif pooling_mode in ("top5", "top10"):
+            k = 5 if pooling_mode == "top5" else 10
+            t_feat = _pool_top_k(media_stack, k=k)
         else:
             t_feat = np.nan_to_num(np.mean(media_stack, axis=0), nan=0.0, posinf=0.0, neginf=0.0)
 

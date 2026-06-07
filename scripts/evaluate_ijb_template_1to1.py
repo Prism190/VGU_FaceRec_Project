@@ -49,7 +49,7 @@ def main() -> None:
     parser.add_argument("--device", default="cuda")
     parser.add_argument(
         "--template-pooling",
-        choices=["mean", "magface_weighted"],
+        choices=["mean", "magface_weighted", "top5", "top10"],
         default="magface_weighted",
         help="Template aggregation mode.",
     )
