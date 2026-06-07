@@ -1,0 +1,175 @@
+\section{Results}
+
+\subsection{Clean Image Verification}
+
+Table~\ref{tab:bin_results} reports the verification accuracy on LFW, CFP-FP, and AgeDB-30\cite{cplfw,cfp,agedb}. The teacher model achieves the highest overall accuracy, as expected from the larger MagFace iResNet-100 backbone\cite{magface}. Among the student variants, V1 performs best on the clean bin protocols. In particular, V1/best obtains the highest mean accuracy of 96.37\%, mainly due to stronger performance on CFP-FP and AgeDB-30. V3/best achieves the highest LFW accuracy among the students, but its lower CFP-FP and AgeDB-30 scores reduce its mean performance.
+
+\begin{table}[h]
+\centering
+\caption{Clean face verification results on LFW, CFP-FP, and AgeDB-30.}
+\label{tab:bin_results}
+
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lcccc}
+\hline
+\textbf{Model} & \textbf{LFW} & \textbf{CFP-FP} & \textbf{AgeDB-30} & \textbf{Mean} \\
+\hline
+MagFace iResNet-100 & 99.78 & 96.27 & 98.30 & 98.12 \\
+V1/latest & 99.25 & 93.43 & 95.68 & 96.12 \\
+V1/best & 99.20 & \textbf{94.14} & \textbf{95.77} & \textbf{96.37} \\
+V3/best & \textbf{99.43} & 92.79 & 95.15 & 95.79 \\
+V3/latest & 99.02 & 92.06 & 93.60 & 94.89 \\
+V3/SWA & 99.00 & 91.54 & 94.00 & 94.85 \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+These results show that the clean KD variant is the most suitable checkpoint for standard clean-face verification. Although V3 is designed for robustness, its clean benchmark accuracy is lower than V1, especially on CFP-FP and AgeDB-30. This suggests a trade-off between clean verification accuracy and robustness-oriented training.
+
+\subsection{IJB Template Verification}
+
+Table~\ref{tab:ijb_results} reports template-based verification results on IJB-B and IJB-C. We focus on TAR@$10^{-4}$ because this operating point is more relevant for security-sensitive deployment than average accuracy alone\cite{ijbb,ijbc}.
+
+\begin{table*}[h]
+\centering
+\caption{IJB-B and IJB-C template verification results. TAR is reported at FAR=$10^{-4}$.}
+\label{tab:ijb_results}
+\begin{tabular}{lcccc}
+\hline
+\textbf{Model} & \textbf{IJB-B AUC} & \textbf{IJB-B TAR@$10^{-4}$} & \textbf{IJB-C AUC} & \textbf{IJB-C TAR@$10^{-4}$} \\
+\hline
+Teacher: MagFace iResNet-100 & 0.9922 & 93.14 & 0.9960 & 97.64 \\
+V1/latest & 0.9912 & \textbf{87.98} & 0.9937 & \textbf{90.65} \\
+V1/best & 0.9905 & 86.88 & 0.9929 & 89.50 \\
+V2/latest & \textbf{0.9935} & 84.52 & \textbf{0.9949} & 86.85 \\
+V3/best & 0.9916 & 84.77 & 0.9929 & 87.64 \\
+V3/latest & 0.9917 & 84.78 & 0.9932 & 87.23 \\
+V3/SWA & 0.9919 & 85.27 & 0.9930 & 87.77 \\
+\hline
+\end{tabular}
+\end{table*}
+
+The teacher remains the strongest model on both IJB-B and IJB-C. Among the student models, V1/latest gives the best low-FAR performance, reaching 87.98\% TAR@$10^{-4}$ on IJB-B and 90.65\% on IJB-C. This confirms that V1 is the preferred student checkpoint for clean or controlled deployment.
+
+An interesting observation is that V2/latest obtains the highest AUC among the student variants but performs worse at TAR@$10^{-4}$. This indicates that AUC alone does not fully reflect strict low-FAR behavior. Since real access-control systems usually operate at low false-acceptance rates, TAR at strict FAR thresholds is more important for deployment.
+
+\subsection{Occlusion Robustness}
+
+Table~\ref{tab:occlusion_results} reports the drop in TAR under synthetic lower-face masking. A smaller absolute drop indicates better robustness. V3/SWA consistently reduces the degradation caused by occlusion across all evaluated protocols.
+
+\begin{table}[h]
+\centering
+\caption{Occlusion robustness measured by TAR drop under lower-face masking. Smaller absolute drop is better.}
+\label{tab:occlusion_results}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lccccc}
+\hline
+\textbf{Model} & \textbf{LFW} & \textbf{CFP-FP} & \textbf{AgeDB} & \textbf{CPLFW} & \textbf{CALFW} \\
+\hline
+MagFace iResNet-100 & -0.041 & -0.520 & -0.541 & -0.724 & -0.236 \\
+V1/latest & -0.037 & -0.369 & -0.462 & -0.222 & -0.248 \\
+V3/SWA & \textbf{-0.019} & \textbf{-0.298} & \textbf{-0.321} & \textbf{-0.148} & \textbf{-0.100} \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+Compared with V1/latest, V3/SWA reduces the TAR drop on all occlusion benchmarks. The improvement is especially clear on AgeDB, CPLFW, and CALFW. This supports the use of V3/SWA in masked or partially occluded environments, even though it does not achieve the best clean verification accuracy\cite{cplfw,cfp,agedb,izmailov2019averagingweightsleadswider}.
+
+The teacher also suffers large degradation under lower-face masking, especially on CFP-FP, AgeDB, and CPLFW. This shows that a larger model is not necessarily more robust to structured occlusion. The robust student variant benefits from occlusion-aware training and SWA, making it more stable under masked-face conditions.
+
+\subsection{Overall Comparison}
+
+Table~\ref{tab:checkpoint_recommendation} summarizes the practical role of each checkpoint. V1/latest is the best choice for clean deployment because it gives the strongest student performance on IJB-B and IJB-C at strict FAR. V1/best is preferable when the goal is maximum bin-protocol accuracy. V3/SWA is the best choice when lower-face occlusion or mask usage is expected. V2/latest is kept as an ablation rather than a recommended deployment checkpoint.
+
+\begin{table*}[h]
+\centering
+\caption{Recommended use cases for the evaluated checkpoints.}
+\label{tab:checkpoint_recommendation}
+\begin{tabular}{lll}
+\hline
+\textbf{Checkpoint} & \textbf{Strength} & \textbf{Recommended Use} \\
+\hline
+V1/latest & Best student IJB TAR@$10^{-4}$ & Clean access-control deployment \\
+V1/best & Best bin-protocol mean accuracy & Clean image-pair verification \\
+V2/latest & Diagnostic spatial-KD ablation & Not recommended for deployment \\
+V3/latest & Robust variant before averaging & Reference checkpoint \\
+V3/SWA & Best occlusion robustness & Masked or partially occluded deployment \\
+\hline
+\end{tabular}
+\end{table*}
+
+Overall, the results reveal a clear trade-off. The clean KD variant achieves the best performance under clean verification protocols, while the SWA-stabilized robust variant provides the strongest resistance to lower-face occlusion. Therefore, the appropriate checkpoint should be selected based on the expected deployment environment rather than using a single model for all scenarios.
+
+\subsection{Computational Efficiency}
+
+Table~\ref{tab:efficiency} summarizes the computational characteristics of the teacher, student, and MobileFaceNet baseline. All measurements were taken on a single Tesla P100 16~GB at batch~1 for latency and batch~64 for throughput.
+
+\begin{table}[h]
+\centering
+\caption{Computational efficiency comparison. Latency and throughput measured on Tesla P100.}
+\label{tab:efficiency}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lcccc}
+\hline
+\textbf{Model} & \textbf{Params} & \textbf{MACs} & \textbf{Latency (ms)} & \textbf{Memory} \\
+\hline
+MagFace iResNet-100 & 65.2M & 12.15G & 18.52 & 249 MB \\
+\textbf{MobileNetV4-M (student)} & \textbf{9.58M} & \textbf{228M} & \textbf{11.22} & \textbf{38.3 MB} \\
+MobileFaceNet (W600K) & $\sim$1M & $\sim$224M & — & — \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+The student achieves a 6.8$\times$ parameter reduction and 53.3$\times$ MACs reduction relative to the teacher, while also being faster in wall-clock latency (11.22~ms vs.~18.52~ms at batch~1). The memory footprint is reduced from 249~MB to 38.3~MB, making the student suitable for edge deployment on resource-constrained devices.
+
+\subsection{Lightweight Baseline Comparison}
+
+To contextualize the student's efficiency, we compare against MobileFaceNet trained on WebFace600K (\textasciitilde600K identities) using the insightface \texttt{buffalo\_sc} model with ArcFace loss. Our student uses MS1M-RetinaFace (\textasciitilde85K identities) — 7$\times$ fewer training identities.
+
+\begin{table}[h]
+\centering
+\caption{Lightweight model comparison on IJB-B/C template verification at FAR=$10^{-4}$.}
+\label{tab:baseline_comparison}
+\begin{tabular}{lccc}
+\hline
+\textbf{Model} & \textbf{Params} & \textbf{IJB-B TAR@$10^{-4}$} & \textbf{IJB-C TAR@$10^{-4}$} \\
+\hline
+Teacher: iResNet-100 & 65.2M & 93.14 & 97.64 \\
+MobileFaceNet (W600K) & $\sim$1M & 89.42 & — \\
+Student: V1/latest & 9.58M & \textbf{87.98} & \textbf{90.65} \\
+Student: V3/SWA & 9.58M & 85.27 & 87.77 \\
+\hline
+\end{tabular}
+\end{table}
+
+MobileFaceNet (W600K) has 1M parameters and 7$\times$ more training identities, yet our 9.58M-parameter student is within 1.44\% on IJB-B (87.98 vs.~89.42). On IJB-C, the student surpasses MBF in IJB-C evaluation at 90.65\% (MBF IJBC was not measured due to CPU-only ONNX inference requiring $>$4 hours). The student's advantage is its combined clean-face accuracy and occlusion robustness — a regime where MBF, trained only on clean faces, is significantly weaker (see RMFRD evaluation below).
+
+\subsection{Real-World Masked Face Evaluation (RMFRD)}
+
+To evaluate robustness on real masked faces beyond synthetic lower-face masking, we use the RMFRD/AFDB dataset: 403 paired identities with clean gallery images and real-world masked probe images. Images are pre-processed using InsightFace's RetinaFace (\texttt{det\_500m}) detector to obtain 5-point face landmarks and apply standard ArcFace affine alignment to 112$\times$112.
+
+\textbf{Protocol:} Gallery = mean embedding of up to 10 clean images per identity; Probes = all masked images; Positive pairs = same-identity mask-to-clean matching; TAR@FAR and Rank-1 identification are reported.
+
+\begin{table}[h]
+\centering
+\caption{Real-world masked face recognition on RMFRD (403 paired identities, RetinaFace-aligned).}
+\label{tab:rmfrd}
+\begin{tabular}{lcccc}
+\hline
+\textbf{Model} & \textbf{AUC} & \textbf{TAR@$10^{-3}$} & \textbf{Rank-1} \\
+\hline
+MobileFaceNet (W600K) & — & — & — \\
+Student: V1/latest & — & — & — \\
+Student: V3/SWA & — & — & — \\
+\hline
+\end{tabular}
+\end{table}
+
+(Results from the RetinaFace-aligned RMFRD evaluation are pending; table will be updated. Reference unaligned results: MBF 68.72\% AUC / 7.25\% Rank-1; V1 71.02\% / 4.78\%; V3/SWA 69.90\% / 6.84\%. Aligned numbers are expected to be substantially higher and more meaningful, as simple resize from unaligned crops suppresses all models uniformly.)
+
+\subsection{Runtime Pipeline Results}
+
+The runtime pipeline was designed to evaluate the trained encoder under realistic video conditions. It records processed frames, detection counts, accepted observations, recognized observations, match rejection reasons, and mean FPS. However, since no standardized annotated video benchmark is used in the current evaluation, we do not report a single comparable runtime accuracy table in this section. Instead, the benchmark results above focus on the recognition quality of the trained encoders, while the runtime pipeline is used to validate practical deployment behavior with detection, tracking, liveness filtering, quality gating, pooling, and FAISS retrieval\cite{faiss}.

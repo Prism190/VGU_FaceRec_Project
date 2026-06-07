@@ -1,0 +1,196 @@
+\begin{table}[h]
+\centering
+\caption{Ablation factors across training variants.}
+\label{tab:ablation_factors}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lcccc}
+\hline
+\textbf{Variant} & \textbf{Embedding KD} & \textbf{Spatial KD} & \textbf{Occlusion Strength} & \textbf{SWA} \\
+\hline
+V1: Clean KD & Yes & No & Light & No \\
+V2: Spatial-Occlusion KD & Yes & Yes & Aggressive & No \\
+V3/latest & Yes & Yes & Milder & No \\
+V3/SWA & Yes & Yes & Milder & Yes \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Clean low-FAR performance versus occlusion robustness.}
+\label{tab:ablation_clean_vs_robust}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lccc}
+\hline
+\textbf{Checkpoint} & \textbf{IJB-B TAR@$10^{-4}$} & \textbf{IJB-C TAR@$10^{-4}$} & \textbf{Occlusion Robustness} \\
+\hline
+V1/latest & \textbf{87.98} & \textbf{90.65} & Medium \\
+V3/SWA & 85.27 & 87.77 & \textbf{High} \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+\begin{table}[h!]
+\centering
+\caption{Effect of aggressive spatial-occlusion KD on IJB template verification.}
+\label{tab:ablation_spatial_kd}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lcccc}
+\hline
+\textbf{Checkpoint} & \textbf{IJB-B AUC} & \textbf{IJB-B TAR@$10^{-4}$} & \textbf{IJB-C AUC} & \textbf{IJB-C TAR@$10^{-4}$} \\
+\hline
+V1/latest & 0.9912 & \textbf{87.98} & 0.9937 & \textbf{90.65} \\
+V2/latest & \textbf{0.9935} & 84.52 & \textbf{0.9949} & 86.85 \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+\begin{table}[h!]
+\centering
+\caption{Effect of SWA on the robust variant.}
+\label{tab:ablation_swa}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lcccc}
+\hline
+\textbf{Checkpoint} & \textbf{IJB-B AUC} & \textbf{IJB-B TAR@$10^{-4}$} & \textbf{IJB-C AUC} & \textbf{IJB-C TAR@$10^{-4}$} \\
+\hline
+V3/latest & 0.9917 & 84.78 & \textbf{0.9932} & 87.23 \\
+V3/SWA & \textbf{0.9919} & \textbf{85.27} & 0.9930 & \textbf{87.77} \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+\begin{table}[h]
+\centering
+\caption{Ablation on lower-face occlusion. Values show TAR drop; smaller absolute drop is better.}
+\label{tab:ablation_occlusion}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lccccc}
+\hline
+\textbf{Checkpoint} & \textbf{LFW} & \textbf{CFP-FP} & \textbf{AgeDB} & \textbf{CPLFW} & \textbf{CALFW} \\
+\hline
+Teacher & -0.041 & -0.520 & -0.541 & -0.724 & -0.236 \\
+V1/latest & -0.037 & -0.369 & -0.462 & -0.222 & -0.248 \\
+V3/SWA & \textbf{-0.019} & \textbf{-0.298} & \textbf{-0.321} & \textbf{-0.148} & \textbf{-0.100} \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+\section{Discussion}
+
+\subsection{Clean Accuracy and Occlusion Robustness}
+
+The results show a clear trade-off between clean-face accuracy and occlusion robustness. V1 achieves the best student performance on clean verification, especially on IJB-B and IJB-C at FAR=$10^{-4}$. This indicates that a clean KD setting with light augmentation is still the most effective choice when the deployment environment is controlled and faces are mostly unoccluded\cite{ijbb,ijbc}.
+
+In contrast, V3/SWA is not the strongest model under clean verification, but it is the most robust under lower-face masking. This suggests that robustness-oriented training can reduce sensitivity to occluded facial regions, but may slightly sacrifice clean benchmark performance. Therefore, the best checkpoint should be selected according to the target deployment condition: V1 for clean access-control scenarios and V3/SWA for masked or partially occluded environments\cite{izmailov2019averagingweightsleadswider}.
+
+\subsection{Effect of Teacher-Student Distillation}
+
+The teacher model remains stronger than all student variants on clean benchmarks, which is expected because the MagFace iResNet-100 teacher has much higher capacity. However, the student models achieve competitive performance while using a significantly smaller MobileNetV4 backbone. This confirms the usefulness of knowledge distillation for transferring the teacher's embedding structure to a lightweight model.
+
+The clean-teacher and augmented-student setup is particularly important. Since the teacher receives clean images while the student receives augmented images, the student is encouraged to produce stable embeddings even under masking or blur. This design allows the student to learn robustness without requiring the teacher itself to process corrupted inputs.
+
+\subsection{Why the Spatial-Occlusion Variant Underperforms}
+
+V2 shows that adding spatial KD and strong occlusion augmentation does not automatically improve performance. Although V2 obtains a high AUC on IJB protocols, its TAR at strict FAR is lower than V1. This means that the model may preserve reasonable average ranking quality, but becomes less reliable in the low-FAR regime required for security-sensitive deployment.
+
+The main issue is the conflict between spatial KD and occluded student inputs. When the student receives a masked image, spatial KD may force it to match teacher feature maps computed from clean images. This creates contradictory supervision because the student is penalized for not reconstructing information that is hidden in its input. This explains why V2 is useful as a diagnostic ablation, but is not recommended as a deployment checkpoint.
+
+\subsection{Role of SWA}
+
+SWA improves the robustness-oriented variant by stabilizing the final checkpoint. Compared with V3/latest, V3/SWA slightly improves IJB low-FAR performance while maintaining the robustness benefits of the occlusion curriculum. This is consistent with the motivation of SWA, which averages model weights across late training epochs to obtain flatter and more stable solutions \cite{izmailov2019averagingweightsleadswider}.
+
+In this work, SWA is most useful not as a method for maximizing clean benchmark accuracy, but as a checkpoint stabilization technique for the robust variant. The improvement is especially relevant when the target deployment environment includes occlusion or masked faces.
+
+\subsection{Importance of Track-Level Recognition}
+
+The runtime pipeline is designed to avoid making identity decisions from a single frame. In video, individual frame embeddings can be affected by blur, pose, illumination, detection errors, or spoof-like artifacts. By using liveness filtering, magnitude-based quality gating, and magnitude-weighted track-level pooling, the system only aggregates reliable observations before retrieval.
+
+This design is important because face recognition in deployment is not only an embedding problem. Stable video recognition also requires detection, alignment, tracking, quality selection, and conservative retrieval. The use of MagFace magnitude as a quality signal is particularly useful because it allows the system to weight clearer observations more heavily during track-level pooling \cite{magface}.
+
+\subsection{Deployment Implications}
+
+The experimental results suggest two practical deployment choices. If the system is used in a controlled environment such as office access control, V1/latest is the preferred checkpoint because it gives the strongest clean IJB low-FAR performance. If the environment contains frequent lower-face occlusion, mask usage, or unstable camera conditions, V3/SWA is more appropriate because it has lower performance degradation under occlusion.
+
+V2 should not be used as the final deployment model. Instead, it provides an important negative result: spatial KD must be applied carefully when the student input is occluded. In the current implementation, spatial KD is disabled during masked epochs to avoid this conflict.
+
+\subsection{Ablation Design}
+
+We conduct a variant-level ablation study using the independently trained checkpoints. Since the variants differ in multiple design choices, this study should be interpreted as a practical ablation over training configurations rather than a fully isolated single-factor ablation. The main factors are clean KD training, spatial KD, occlusion curriculum strength, and SWA checkpoint averaging\cite{izmailov2019averagingweightsleadswider}.
+
+
+\subsection{Effect of Occlusion-Oriented Training}
+
+The comparison between V1 and V3/SWA shows the main trade-off in the system. V1 performs better on clean IJB verification, reaching 87.98\% TAR@$10^{-4}$ on IJB-B and 90.65\% on IJB-C. V3/SWA is lower on clean IJB, reaching 85.27\% on IJB-B and 87.77\% on IJB-C. However, V3/SWA is substantially more robust under lower-face masking\cite{ijbb,ijbc}.
+
+
+
+This confirms that occlusion-oriented training improves robustness but does not necessarily improve clean verification accuracy. Therefore, robustness should be optimized according to the expected deployment environment rather than treated as a universally better training objective.
+
+\subsection{Effect of Aggressive Spatial-Occlusion KD}
+
+V2 tests the combination of spatial KD and aggressive occlusion curriculum. Although it achieves the highest AUC among the student variants on IJB-B and IJB-C, its low-FAR TAR is worse than V1. This indicates that the model is not well calibrated for strict false-acceptance settings\cite{ijbb,ijbc}.
+
+
+
+This result suggests that AUC alone is insufficient for evaluating deployment readiness. For access-control applications, TAR at strict FAR is more important. The lower TAR of V2 supports the conclusion that aggressive occlusion and spatial KD can conflict when the teacher target is clean but the student input is masked.
+
+\subsection{Effect of SWA}
+
+To isolate the effect of checkpoint averaging within the robust setting, we compare V3/latest and V3/SWA. SWA slightly improves low-FAR IJB performance while keeping the model in the same robustness-oriented training family\cite{izmailov2019averagingweightsleadswider}.
+
+
+
+The improvement is modest but consistent at the strict FAR operating point. This supports the use of SWA as a stabilization step for the robust variant.
+
+\subsection{Effect of Lower-Face Occlusion}
+
+The lower-face masking evaluation shows that V3/SWA is the most robust checkpoint under occlusion. Compared with V1/latest, V3/SWA reduces the TAR drop across all evaluated masked protocols.
+
+
+
+The teacher suffers the largest degradation under masking on several protocols, despite being the strongest model under clean evaluation. This indicates that model capacity alone does not guarantee robustness to structured occlusion. The robust student benefits from occlusion-aware training and checkpoint averaging.
+
+\subsection{Template Pooling Ablation}
+
+To validate our use of magnitude-weighted template pooling, we compare four pooling strategies on IJB-B/C:
+\begin{itemize}
+    \item \textbf{mean}: simple average of per-image embeddings, then L2-normalize.
+    \item \textbf{magface\_weighted}: quality-weighted average using L2 norm as a confidence weight: $\hat{f} = (\sum_i \|f_i\| \cdot f_i) / \sum_i \|f_i\|$.
+    \item \textbf{top5/top10}: select the top-$k$ images by embedding norm (highest quality), then average.
+\end{itemize}
+
+\begin{table*}[h]
+\centering
+\caption{Template pooling ablation on IJB-B/C. TAR at FAR=$10^{-4}$ is the primary metric for access control.}
+\label{tab:pooling_ablation}
+\resizebox{\textwidth}{!}{%
+\begin{tabular}{llcccccc}
+\hline
+\textbf{Model} & \textbf{Pool} & \textbf{IJBB AUC} & \textbf{IJBB TAR@$10^{-3}$} & \textbf{IJBB TAR@$10^{-4}$} & \textbf{IJBC AUC} & \textbf{IJBC TAR@$10^{-3}$} & \textbf{IJBC TAR@$10^{-4}$} \\
+\hline
+V1/latest & mean             & 99.38 & 92.91 & 86.61 & 99.55 & 94.40 & 89.13 \\
+V1/latest & magface\_weighted & 99.12 & 93.51 & \textbf{87.98} & 99.37 & 94.87 & \textbf{90.65} \\
+V1/latest & top5             & — & — & — & — & — & — \\
+V1/latest & top10            & — & — & — & — & — & — \\
+V3/SWA    & mean             & 99.20 & 92.23 & 85.11 & 99.32 & 93.51 & 87.74 \\
+V3/SWA    & magface\_weighted & 99.19 & 92.23 & \textbf{85.27} & 99.30 & 93.54 & \textbf{87.77} \\
+V3/SWA    & top5             & — & — & — & — & — & — \\
+V3/SWA    & top10            & — & — & — & — & — & — \\
+\hline
+\end{tabular}
+}
+\end{table*}
+
+Mean pooling produces slightly higher AUC overall but underperforms \texttt{magface\_weighted} at strict FAR ($10^{-4}$), the operating point relevant for access control. \texttt{magface\_weighted} wins by 1.37\% on V1/latest IJB-B and 1.52\% on V1/latest IJB-C at TAR@$10^{-4}$. This validates the design choice: quality-weighting by embedding norm consistently prioritizes higher-quality face observations and achieves better calibration at low FAR. (top5/top10 results pending from the running ablation.)
+
+\subsection{Ablation Summary}
+
+The ablation study leads to four main observations. First, clean KD training is the best choice for clean low-FAR verification. Second, aggressive spatial KD with occlusion can hurt deployment-oriented metrics. Third, SWA improves the robustness-oriented checkpoint. Fourth, magnitude-weighted pooling outperforms simple mean averaging at strict FAR operating points, validating its use in the deployment pipeline.
+
+Overall, the ablation results support a deployment-dependent model selection strategy: V1/latest should be used for clean environments, while V3/SWA should be used when partial occlusion is expected.
