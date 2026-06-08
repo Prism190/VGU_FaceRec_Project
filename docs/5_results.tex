@@ -179,6 +179,38 @@ Among the student models, V3/SWA (84.18\% AUC, 23.03\% Rank-1) outperforms V1/be
 
 MobileFaceNet (W600K), despite its smaller parameter count (1M vs.\ 9.58M), outperforms both student variants on this dataset (85.55\% AUC, 36.56\% Rank-1). We attribute this primarily to the significantly larger training set: MBF is trained on WebFace600K with $\sim$600K identities, while our student uses MS1M-RetinaFace with $\sim$85K identities (7$\times$ fewer). Additionally, the RMFRD dataset predominantly features Asian celebrities, who may be more represented in WebFace600K than in MS1M. This suggests that the student's IJB advantage does not fully translate to this particular domain, highlighting the importance of training data diversity for cross-domain robustness.
 
+\subsection{Real-World Masked Face Evaluation (MFR2)}
+
+MFR2 is a real-world masked face dataset of 55 celebrity identities with both masked and unmasked images per subject. We evaluate 53 identities that have at least one clean (\texttt{no-mask}) and one masked image. Two protocols are evaluated:
+
+\begin{itemize}
+    \item \textbf{Verification (pairs.txt)}: 424 same-identity and 424 different-identity pairs sourced from the official LFW-style split; pairs may combine masked and unmasked images. We report AUC.
+    \item \textbf{1:N Identification}: gallery = mean embedding of all clean images per identity (98 total); probes = all masked images (171 total). We report AUC and Rank-1.
+\end{itemize}
+
+Note: With only 424 negative pairs in the verification split, the FAR resolution ($\approx 1/424 \approx 0.0024$) is too coarse to report meaningful TAR at FAR$\leq10^{-3}$; we therefore report AUC only for MFR2.
+
+\begin{table}[h]
+\centering
+\caption{MFR2 evaluation (53 paired identities). Verification: pairs.txt AUC (mixed masked/clean pairs). Identification: 1:N AUC and Rank-1 with clean gallery and masked probes.}
+\label{tab:mfr2}
+\resizebox{\columnwidth}{!}{%
+\begin{tabular}{lccc}
+\hline
+\textbf{Model} & \textbf{Verif AUC} & \textbf{ID AUC} & \textbf{ID Rank-1} \\
+\hline
+MobileFaceNet (W600K) & 89.91 & 95.11 & \textbf{72.51} \\
+Student: V1/best      & 94.18 & 95.37 & 61.99 \\
+Student: V3/SWA       & \textbf{94.38} & \textbf{95.99} & 66.67 \\
+\hline
+\end{tabular}
+}
+\end{table}
+
+Both student models substantially outperform MobileFaceNet (W600K) on MFR2 verification AUC (V1/best: $+4.27\%$; V3/SWA: $+4.47\%$). V3/SWA also surpasses MBF on identification AUC ($+0.88\%$). The improvement on verification AUC confirms that the student's knowledge-distilled embeddings yield stronger pairwise discriminability on a mixed masked/unmasked face matching task, despite training on $7\times$ fewer identities.
+
+However, MBF retains a substantial lead on Rank-1 identification ($72.51\%$ vs.\ $66.67\%$ for V3/SWA). This mirrors the RMFRD pattern, where MBF also leads on Rank-1. We attribute MBF's Rank-1 advantage to its larger training set ($\sim\!600$K identities vs.\ $\sim\!85$K) and, potentially, to greater overlap with the post-2020 political celebrity identities featured in both MFR2 and RMFRD. The student's superior AUC suggests better relative embedding calibration, but fewer absolute successes at the top-1 threshold.
+
 \subsection{Runtime Pipeline Results}
 
 The runtime pipeline was designed to evaluate the trained encoder under realistic video conditions. It records processed frames, detection counts, accepted observations, recognized observations, match rejection reasons, and mean FPS. However, since no standardized annotated video benchmark is used in the current evaluation, we do not report a single comparable runtime accuracy table in this section. Instead, the benchmark results above focus on the recognition quality of the trained encoders, while the runtime pipeline is used to validate practical deployment behavior with detection, tracking, liveness filtering, quality gating, pooling, and FAISS retrieval\cite{faiss}.

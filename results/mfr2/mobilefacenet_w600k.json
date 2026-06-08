@@ -1,0 +1,16 @@
+{
+  "model": "MobileFaceNet_W600K",
+  "dataset": "MFR2",
+  "num_paired_identities": 53,
+  "num_gallery_images": 98,
+  "num_probe_images": 171,
+  "verification_auc": 0.8991022160911357,
+  "verification_num_same_pairs": 424,
+  "verification_num_diff_pairs": 424,
+  "identification_auc": 0.951137102014295,
+  "identification_rank1": 0.7251461988304093,
+  "verification_tar_far_1e-3": 0.3231132075471698,
+  "identification_tar_far_1e-3": 0.3391812865497076,
+  "verification_tar_far_1e-4": 0.3231132075471698,
+  "identification_tar_far_1e-4": 0.3391812865497076
+}
