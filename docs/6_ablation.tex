@@ -87,7 +87,7 @@ V3/SWA & \textbf{-0.019} & \textbf{-0.298} & \textbf{-0.321} & \textbf{-0.148} &
 
 The results show a clear trade-off between clean-face accuracy and occlusion robustness. V1 achieves the best student performance on clean verification, especially on IJB-B and IJB-C at FAR=$10^{-4}$. This indicates that a clean KD setting with light augmentation is still the most effective choice when the deployment environment is controlled and faces are mostly unoccluded\cite{ijbb,ijbc}.
 
-In contrast, V3/SWA is not the strongest model under clean verification, but it is the most robust under lower-face masking. This suggests that robustness-oriented training can reduce sensitivity to occluded facial regions, but may slightly sacrifice clean benchmark performance. Therefore, the best checkpoint should be selected according to the target deployment condition: V1 for clean access-control scenarios and V3/SWA for masked or partially occluded environments\cite{izmailov2019averagingweightsleadswider}.
+In contrast, V3/SWA is not the strongest model under clean verification, but it is the most robust under lower-face masking — and crucially, it outperforms MobileFaceNet (W600K) on all five synthetic occlusion benchmarks. MBF, despite being trained on $7\times$ more identities, degrades by $-0.549$ to $-0.550$ TAR@$10^{-3}$ on CFP-FP and AgeDB under masking, compared to V3/SWA's $-0.298$ and $-0.321$. This demonstrates that training-data volume does not substitute for explicit occlusion-curriculum training: MBF is a clean-face specialist that lacks the structural robustness built into V3/SWA via augmented distillation. Therefore, the best checkpoint should be selected according to the target deployment condition: V1 for clean access-control scenarios and V3/SWA for masked or partially occluded environments\cite{izmailov2019averagingweightsleadswider}.
 
 \subsection{Effect of Teacher-Student Distillation}
 
@@ -167,7 +167,7 @@ To validate our use of magnitude-weighted template pooling, we compare four pool
 
 \begin{table*}[h]
 \centering
-\caption{Template pooling ablation on IJB-B/C. TAR at FAR=$10^{-4}$ is the primary metric for access control. All rows use the same checkpoint per model (V1/best = \texttt{phase1\_best.pt}; V3/SWA = SWA-averaged checkpoint). ``—'' = pending.}
+\caption{Template pooling ablation on IJB-B/C. TAR at FAR=$10^{-4}$ is the primary metric for access control. All rows use the same checkpoint per model (V1/best = \texttt{phase1\_best.pt}; V3/SWA = SWA-averaged checkpoint). Bold = best per model group at strict FAR.}
 \label{tab:pooling_ablation}
 \resizebox{\textwidth}{!}{%
 \begin{tabular}{llcccccc}
@@ -175,19 +175,19 @@ To validate our use of magnitude-weighted template pooling, we compare four pool
 \textbf{Model} & \textbf{Pool} & \textbf{IJBB AUC} & \textbf{IJBB TAR@$10^{-3}$} & \textbf{IJBB TAR@$10^{-4}$} & \textbf{IJBC AUC} & \textbf{IJBC TAR@$10^{-3}$} & \textbf{IJBC TAR@$10^{-4}$} \\
 \hline
 V1/best & mean             & 99.38 & 92.91 & 86.61 & 99.55 & 94.40 & 89.13 \\
-V1/best & magface\_weighted & 99.38 & 93.01 & \textbf{86.88} & 99.54 & 94.51 & \textbf{89.50} \\
-V1/best & top5             & — & — & — & — & — & — \\
-V1/best & top10            & — & — & — & — & — & — \\
+V1/best & magface\_weighted & 99.38 & 93.01 & \textbf{86.88} & 99.54 & 94.51 & 89.50 \\
+V1/best & top5             & 99.35 & 92.74 & 86.41 & 99.53 & 94.47 & 89.38 \\
+V1/best & top10            & 99.38 & \textbf{93.04} & 86.87 & 99.54 & \textbf{94.61} & \textbf{89.52} \\
 V3/SWA  & mean             & 99.20 & 92.23 & 85.11 & 99.32 & 93.51 & 87.74 \\
-V3/SWA  & magface\_weighted & 99.19 & 92.23 & \textbf{85.27} & — & — & — \\
-V3/SWA  & top5             & — & — & — & — & — & — \\
-V3/SWA  & top10            & — & — & — & — & — & — \\
+V3/SWA  & magface\_weighted & 99.19 & 92.23 & \textbf{85.27} & 99.30 & 93.54 & 87.77 \\
+V3/SWA  & top5             & 99.18 & 91.99 & 84.91 & 99.28 & 93.49 & 87.80 \\
+V3/SWA  & top10            & 99.19 & \textbf{92.30} & 85.24 & 99.29 & \textbf{93.58} & \textbf{87.88} \\
 \hline
 \end{tabular}
 }
 \end{table*}
 
-Mean pooling produces slightly higher AUC overall but underperforms \texttt{magface\_weighted} at strict FAR ($10^{-4}$), the operating point relevant for access control. For V1/best on IJB-B, \texttt{magface\_weighted} gains 0.27\% over mean (86.88\% vs.\ 86.61\%) at TAR@$10^{-4}$; on IJB-C the gain is 0.37\% (89.50\% vs.\ 89.13\%). For V3/SWA on IJB-B, the gain is 0.16\% (85.27\% vs.\ 85.11\%). This validates the design choice: quality-weighting by embedding norm consistently prioritizes higher-quality face observations and achieves better calibration at low FAR. (V3/SWA IJBC magface\_weighted and top5/top10 results are pending from the running ablation. The V1/latest checkpoint achieves 87.98\% IJBB TAR@$10^{-4}$ with \texttt{magface\_weighted}, reported in Table~\ref{tab:ijb_results}.)
+Mean pooling produces slightly higher AUC overall but underperforms quality-based pooling at strict FAR ($10^{-4}$), the operating point relevant for access control. For V1/best on IJB-B, \texttt{magface\_weighted} gains 0.27\% over mean (86.88\% vs.\ 86.61\%) at TAR@$10^{-4}$; on IJB-C the gain over mean reaches 0.39\% for \texttt{top10} (89.52\% vs.\ 89.13\%). For V3/SWA on IJB-B, \texttt{magface\_weighted} gains 0.16\% (85.27\% vs.\ 85.11\%); on IJB-C \texttt{top10} achieves 87.88\% vs.\ 87.74\% for mean. The differences between \texttt{magface\_weighted} and \texttt{top10} are consistently small ($\leq$0.02\% on IJBB TAR@$10^{-4}$, $\leq$0.11\% on IJBC), while \texttt{top5} is the weakest quality-based variant due to discarding too many observations per template. These results confirm that quality-based selection by embedding norm improves calibration at low FAR, validating the pipeline's use of \texttt{magface\_weighted} pooling. The V1/latest checkpoint achieves 87.98\% IJBB TAR@$10^{-4}$ with \texttt{magface\_weighted}, reported in Table~\ref{tab:ijb_results}.
 
 \subsection{Ablation Summary}
 

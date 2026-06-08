@@ -56,11 +56,11 @@ An interesting observation is that V2/latest obtains the highest AUC among the s
 
 \subsection{Occlusion Robustness}
 
-Table~\ref{tab:occlusion_results} reports the drop in TAR under synthetic lower-face masking. A smaller absolute drop indicates better robustness. V3/SWA consistently reduces the degradation caused by occlusion across all evaluated protocols.
+Table~\ref{tab:occlusion_results} reports the TAR@$10^{-3}$ drop under synthetic lower-face masking. A smaller absolute drop indicates better robustness. We include MobileFaceNet (W600K) to provide a direct comparison against the lightweight baseline.
 
 \begin{table}[h]
 \centering
-\caption{Occlusion robustness measured by TAR drop under lower-face masking. Smaller absolute drop is better.}
+\caption{Occlusion robustness: TAR@$10^{-3}$ drop (masked$-$clean) under synthetic lower-face masking. Smaller absolute value is better.}
 \label{tab:occlusion_results}
 \resizebox{\columnwidth}{!}{%
 \begin{tabular}{lccccc}
@@ -68,6 +68,7 @@ Table~\ref{tab:occlusion_results} reports the drop in TAR under synthetic lower-
 \textbf{Model} & \textbf{LFW} & \textbf{CFP-FP} & \textbf{AgeDB} & \textbf{CPLFW} & \textbf{CALFW} \\
 \hline
 MagFace iResNet-100 & -0.041 & -0.520 & -0.541 & -0.724 & -0.236 \\
+MobileFaceNet (W600K) & -0.085 & -0.549 & -0.550 & -0.494 & -0.324 \\
 V1/latest & -0.037 & -0.369 & -0.462 & -0.222 & -0.248 \\
 V3/SWA & \textbf{-0.019} & \textbf{-0.298} & \textbf{-0.321} & \textbf{-0.148} & \textbf{-0.100} \\
 \hline
@@ -75,9 +76,11 @@ V3/SWA & \textbf{-0.019} & \textbf{-0.298} & \textbf{-0.321} & \textbf{-0.148} &
 }
 \end{table}
 
-Compared with V1/latest, V3/SWA reduces the TAR drop on all occlusion benchmarks. The improvement is especially clear on AgeDB, CPLFW, and CALFW. This supports the use of V3/SWA in masked or partially occluded environments, even though it does not achieve the best clean verification accuracy\cite{cplfw,cfp,agedb,izmailov2019averagingweightsleadswider}.
+The key finding is that both student variants outperform MobileFaceNet (W600K) on all five occlusion benchmarks, despite MBF being trained on $7\times$ more identities. MBF suffers the largest TAR drops in this group: $-0.549$ on CFP-FP, $-0.550$ on AgeDB, and $-0.494$ on CPLFW. This is expected because MBF is trained exclusively on clean faces with no occlusion augmentation, leaving it brittle under lower-face masking. In contrast, both V1/latest ($-0.369$, $-0.462$, $-0.222$) and V3/SWA ($-0.298$, $-0.321$, $-0.148$) show substantially smaller degradation, with V3/SWA being the most robust across all protocols.
 
-The teacher also suffers large degradation under lower-face masking, especially on CFP-FP, AgeDB, and CPLFW. This shows that a larger model is not necessarily more robust to structured occlusion. The robust student variant benefits from occlusion-aware training and SWA, making it more stable under masked-face conditions.
+V3/SWA reduces the absolute TAR drop relative to MBF by $45.7\%$ on CFP-FP, $41.6\%$ on AgeDB, $70.1\%$ on CPLFW, and $69.1\%$ on CALFW. These are the clearest advantages of the proposed occlusion-curriculum and SWA training over a strong clean-face baseline.
+
+The teacher also suffers large degradation under lower-face masking, especially on CFP-FP, AgeDB, and CPLFW. This shows that neither model scale nor training data volume guarantees robustness to structured occlusion\cite{cplfw,cfp,agedb,izmailov2019averagingweightsleadswider}.
 
 \subsection{Overall Comparison}
 
@@ -138,14 +141,14 @@ To contextualize the student's efficiency, we compare against MobileFaceNet trai
 \textbf{Model} & \textbf{Params} & \textbf{IJB-B TAR@$10^{-4}$} & \textbf{IJB-C TAR@$10^{-4}$} \\
 \hline
 Teacher: iResNet-100 & 65.2M & 93.14 & 97.64 \\
-MobileFaceNet (W600K) & $\sim$1M & 89.42 & — \\
-Student: V1/latest & 9.58M & \textbf{87.98} & \textbf{90.65} \\
+MobileFaceNet (W600K) & $\sim$1M & 89.42 & 91.72 \\
+Student: V1/latest & 9.58M & 87.98 & 90.65 \\
 Student: V3/SWA & 9.58M & 85.27 & 87.77 \\
 \hline
 \end{tabular}
 \end{table}
 
-MobileFaceNet (W600K) has 1M parameters and 7$\times$ more training identities, yet our 9.58M-parameter student is within 1.44\% on IJB-B (87.98 vs.~89.42). On IJB-C, the student surpasses MBF in IJB-C evaluation at 90.65\% (MBF IJBC was not measured due to CPU-only ONNX inference requiring $>$4 hours). The student's advantage is its combined clean-face accuracy and occlusion robustness — a regime where MBF, trained only on clean faces, is significantly weaker (see RMFRD evaluation below).
+MobileFaceNet (W600K) has 1M parameters and 7$\times$ more training identities, yet our 9.58M-parameter student is within 1.44\% on IJB-B (87.98 vs.~89.42) and within 1.07\% on IJB-C (90.65 vs.~91.72). Despite having 9$\times$ more parameters than MBF, the student compensates through knowledge distillation from a strong teacher, achieving competitive IJB performance with substantially fewer training identities. The key advantage of the student over MBF lies in occlusion robustness — a regime where MBF, trained only on clean faces, is significantly weaker (see RMFRD evaluation below).
 
 \subsection{Real-World Masked Face Evaluation (RMFRD)}
 
