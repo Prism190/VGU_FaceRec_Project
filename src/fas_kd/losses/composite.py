@@ -19,6 +19,8 @@ class DistillationObjective(nn.Module):
         lambda_spatial_start: float = 0.0,
         lambda_spatial_end: float = 0.0,
         spatial_ramp_epochs: int = 0,
+        lambda_norm_reg: float = 0.0,
+        max_norm_threshold: float = 30.0,
     ) -> None:
         super().__init__()
         self.lambda_cls = float(lambda_cls)
@@ -31,6 +33,8 @@ class DistillationObjective(nn.Module):
         self.lambda_spatial_start = float(lambda_spatial_start)
         self.lambda_spatial_end = float(lambda_spatial_end)
         self.spatial_ramp_epochs = int(spatial_ramp_epochs)
+        self.lambda_norm_reg = float(lambda_norm_reg)
+        self.max_norm_threshold = float(max_norm_threshold)
 
         if self.kd_type not in {"cosine", "mse"}:
             raise ValueError(f"Unsupported kd_type: {kd_type}")
@@ -82,12 +86,21 @@ class DistillationObjective(nn.Module):
                 )
             spatial_kd = mse_kd_loss(student_spatial, teacher_spatial)
 
+        norm_reg = torch.zeros((), device=student_embeddings.device, dtype=student_embeddings.dtype)
+        if self.lambda_norm_reg > 0.0:
+            # Quadratic penalty on embedding norms that exceed max_norm_threshold.
+            # Counteracts MagFace's own regularizer which rewards inflating norms.
+            emb_norms = student_embeddings.norm(dim=1)
+            excess = torch.relu(emb_norms - self.max_norm_threshold)
+            norm_reg = (excess ** 2).mean()
+
         total = (
             (self.lambda_cls * class_loss)
             + (kd_w * kd)
             + (self.lambda_rkd_distance * rkd_d)
             + (self.lambda_rkd_angle * rkd_a)
             + (spatial_w * spatial_kd)
+            + (self.lambda_norm_reg * norm_reg)
         )
 
         return {
@@ -97,6 +110,7 @@ class DistillationObjective(nn.Module):
             "loss_rkd_distance": rkd_d.detach(),
             "loss_rkd_angle": rkd_a.detach(),
             "loss_spatial_kd": spatial_kd.detach(),
+            "loss_norm_reg": norm_reg.detach(),
             "kd_weight": torch.tensor(kd_w, device=student_embeddings.device),
             "spatial_kd_weight": torch.tensor(spatial_w, device=student_embeddings.device),
         }

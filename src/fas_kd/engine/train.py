@@ -410,6 +410,7 @@ def _train_one_epoch(
     sum_kd = torch.zeros((), dtype=torch.float32, device=ctx.device)
     sum_spatial_kd = torch.zeros((), dtype=torch.float32, device=ctx.device)
     sum_reg = torch.zeros((), dtype=torch.float32, device=ctx.device)
+    sum_norm_reg = torch.zeros((), dtype=torch.float32, device=ctx.device)
     sum_kd_weight = torch.zeros((), dtype=torch.float32, device=ctx.device)
     sum_spatial_weight = torch.zeros((), dtype=torch.float32, device=ctx.device)
     sum_steps = torch.zeros((), dtype=torch.float32, device=ctx.device)
@@ -512,6 +513,7 @@ def _train_one_epoch(
         sum_kd += loss_out["loss_kd"]
         sum_spatial_kd += loss_out["loss_spatial_kd"]
         sum_reg += head_out["reg_loss"].detach()
+        sum_norm_reg += loss_out["loss_norm_reg"]
         sum_kd_weight += loss_out["kd_weight"].detach()
         sum_spatial_weight += loss_out["spatial_kd_weight"].detach()
         sum_steps += 1.0
@@ -537,7 +539,8 @@ def _train_one_epoch(
                 f"total={float(total_loss.detach().item()):.4f} "
                 f"cls={float(loss_out['loss_cls'].detach().item()):.4f} "
                 f"kd={float(loss_out['loss_kd'].detach().item()):.4f} "
-                f"skd={float(loss_out['loss_spatial_kd'].detach().item()):.4f}"
+                f"skd={float(loss_out['loss_spatial_kd'].detach().item()):.4f} "
+                f"nreg={float(loss_out['loss_norm_reg'].detach().item()):.4f}"
             )
             if progress is not None:
                 progress.write(msg)
@@ -560,6 +563,7 @@ def _train_one_epoch(
         dist.all_reduce(sum_kd, op=dist.ReduceOp.SUM)
         dist.all_reduce(sum_spatial_kd, op=dist.ReduceOp.SUM)
         dist.all_reduce(sum_reg, op=dist.ReduceOp.SUM)
+        dist.all_reduce(sum_norm_reg, op=dist.ReduceOp.SUM)
         dist.all_reduce(sum_kd_weight, op=dist.ReduceOp.SUM)
         dist.all_reduce(sum_spatial_weight, op=dist.ReduceOp.SUM)
         dist.all_reduce(sum_steps, op=dist.ReduceOp.SUM)
@@ -572,6 +576,7 @@ def _train_one_epoch(
         "train_loss_kd": float(sum_kd.item() / denom),
         "train_loss_spatial_kd": float(sum_spatial_kd.item() / denom),
         "train_loss_mag_reg": float(sum_reg.item() / denom),
+        "train_loss_norm_reg": float(sum_norm_reg.item() / denom),
         "train_kd_weight": float(sum_kd_weight.item() / denom),
         "train_spatial_kd_weight": float(sum_spatial_weight.item() / denom),
         "train_samples_per_sec": float(sum_samples.item() / elapsed),
@@ -784,6 +789,8 @@ def run_training(config: dict[str, Any]) -> None:
             lambda_spatial_start=float(loss_cfg.get("lambda_spatial_start", 0.0)),
             lambda_spatial_end=float(loss_cfg.get("lambda_spatial_end", 0.0)),
             spatial_ramp_epochs=int(loss_cfg.get("spatial_ramp_epochs", 0)),
+            lambda_norm_reg=float(loss_cfg.get("lambda_norm_reg", 0.0)),
+            max_norm_threshold=float(loss_cfg.get("max_norm_threshold", 30.0)),
         )
 
         if use_spatial_kd:
@@ -865,9 +872,14 @@ def run_training(config: dict[str, Any]) -> None:
                               f"starting fresh optimizer (warm model weights retained).")
                         print(f"          Reason: {_opt_err}")
 
+            _reset_scheduler = bool(config["train"].get("reset_scheduler_on_resume", False))
             _ckpt_sched_type = chkpt.get("scheduler_type", None)
             _cur_sched_type = type(scheduler).__name__
-            if "scheduler_state" in chkpt:
+            if _reset_scheduler:
+                if is_main_process(ctx):
+                    print("[*] reset_scheduler_on_resume=true: ignoring checkpoint scheduler state, "
+                          "using config milestones from epoch 0.")
+            elif "scheduler_state" in chkpt:
                 if _ckpt_sched_type != _cur_sched_type:
                     if is_main_process(ctx):
                         label = _ckpt_sched_type if _ckpt_sched_type is not None else "unknown (legacy checkpoint)"
