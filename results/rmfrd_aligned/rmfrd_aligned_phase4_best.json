@@ -1,0 +1,15 @@
+{
+  "model": "phase4/best",
+  "dataset": "RMFRD",
+  "num_paired_identities": 403,
+  "num_gallery_images": 4029,
+  "num_probe_images": 1945,
+  "num_positive_pairs": 1945,
+  "num_negative_pairs": 9725,
+  "gallery_per_id": 10,
+  "roc_auc": 0.8206620892011023,
+  "rank1_identification": 0.20668380462724936,
+  "tar_far_1e-3": 0.08020565552699228,
+  "tar_far_1e-4": 0.002570694087403599,
+  "tar_far_1e-5": 0.002570694087403599
+}

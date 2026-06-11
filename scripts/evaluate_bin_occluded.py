@@ -48,6 +48,8 @@ CHECKPOINTS = [
      "runs/ms1m_magface_phase3_trueasym_swa_v1/checkpoints/swa.pt"),
     ("phase3/best",  "configs/train_ms1m_magface_phase3_trueasym_swa_v1.yaml",
      "runs/ms1m_magface_phase3_trueasym_swa_v1/checkpoints/best.pt"),
+    ("phase4/best",  "configs/train_ms1m_magface_phase4_v1.yaml",
+     "runs/ms1m_magface_phase4_v1/checkpoints/best.pt"),
 ]
 
 BIN_SETS = {

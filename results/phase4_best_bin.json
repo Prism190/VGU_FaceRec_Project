@@ -1,0 +1,75 @@
+{
+  "student": {
+    "lfw": {
+      "accuracy": 0.9958333333333333,
+      "roc_auc": 0.9993661111111112,
+      "best_threshold": 0.2457275390625,
+      "num_pairs": 6000,
+      "num_scores_non_finite": 0,
+      "tar_far_1e-3": 0.9913333333333333,
+      "tar_far_1e-4": 0.9803333333333333,
+      "tar_far_1e-5": 0.9803333333333333
+    },
+    "cfp_fp": {
+      "accuracy": 0.9271428571428572,
+      "roc_auc": 0.9659889795918367,
+      "best_threshold": 0.1182861328125,
+      "num_pairs": 7000,
+      "num_scores_non_finite": 0,
+      "tar_far_1e-3": 0.6831428571428572,
+      "tar_far_1e-4": 0.6342857142857142,
+      "tar_far_1e-5": 0.6342857142857142
+    },
+    "agedb30": {
+      "accuracy": 0.9531666666666667,
+      "roc_auc": 0.9859392222222222,
+      "best_threshold": 0.1832275390625,
+      "num_pairs": 6000,
+      "num_scores_non_finite": 0,
+      "tar_far_1e-3": 0.7146666666666667,
+      "tar_far_1e-4": 0.6293333333333333,
+      "tar_far_1e-5": 0.6293333333333333
+    },
+    "aggregate": {
+      "mean_accuracy": 0.9587142857142857,
+      "mean_roc_auc": 0.9837647709750567
+    }
+  },
+  "teacher": {
+    "lfw": {
+      "accuracy": 0.9978333333333333,
+      "roc_auc": 0.9994083888888888,
+      "best_threshold": 0.34130859375,
+      "num_pairs": 6000,
+      "num_scores_non_finite": 0,
+      "tar_far_1e-3": 0.9966666666666667,
+      "tar_far_1e-4": 0.9956666666666667,
+      "tar_far_1e-5": 0.9956666666666667
+    },
+    "cfp_fp": {
+      "accuracy": 0.9627142857142857,
+      "roc_auc": 0.9752899183673469,
+      "best_threshold": 0.1973876953125,
+      "num_pairs": 7000,
+      "num_scores_non_finite": 0,
+      "tar_far_1e-3": 0.9134285714285715,
+      "tar_far_1e-4": 0.902,
+      "tar_far_1e-5": 0.902
+    },
+    "agedb30": {
+      "accuracy": 0.983,
+      "roc_auc": 0.9914585555555555,
+      "best_threshold": 0.2447509765625,
+      "num_pairs": 6000,
+      "num_scores_non_finite": 0,
+      "tar_far_1e-3": 0.9603333333333334,
+      "tar_far_1e-4": 0.9193333333333333,
+      "tar_far_1e-5": 0.9193333333333333
+    },
+    "aggregate": {
+      "mean_accuracy": 0.9811825396825397,
+      "mean_roc_auc": 0.9887189542705971
+    }
+  }
+}
+WROTE logs/eval_bin_protocol.json

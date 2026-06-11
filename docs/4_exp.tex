@@ -4,23 +4,24 @@
 
 We evaluate the proposed method at two levels: face embedding verification and runtime video recognition. The first evaluation measures the discriminative quality of the learned embeddings on standard image and template-based face verification benchmarks. The second evaluation tests the trained encoder inside the full video pipeline, including detection, tracking, liveness filtering, quality gating, track-level pooling, and identity retrieval.
 
-All student models are trained on MS1M using the same teacher-student framework\cite{MS1M}. The teacher is a frozen MagFace iResNet-100 model, and the student is a MobileNetV4-Conv-Medium encoder with 512-dimensional embeddings\cite{magface}\cite{mobilenetv4}. We compare three independently trained variants rather than sequential training stages: a clean KD baseline, a spatial-KD occlusion variant, and an SWA-stabilized robust variant\cite{izmailov2019averagingweightsleadswider}. Each model is trained from scratch for 40 epochs using AdamW, mixed precision, DALI RecordIO loading, a 3-epoch warm-up, and multi-step learning-rate decay at epochs 20, 30, and 36.
+All student models are trained on MS1M using the same teacher-student framework\cite{MS1M}. The teacher is a frozen MagFace iResNet-100 model, and the student is a MobileNetV4-Conv-Medium encoder with 512-dimensional embeddings\cite{magface}\cite{mobilenetv4}. We compare four independently trained variants rather than sequential training stages: a clean KD baseline, a spatial-KD occlusion variant, an SWA-stabilized robust variant, and a gated-spatial-KD variant\cite{izmailov2019averagingweightsleadswider}. Each model is trained from scratch for 40 epochs using AdamW, mixed precision, DALI RecordIO loading, a 3-epoch warm-up, and multi-step learning-rate decay at epochs 20, 30, and 36.
 
 \subsection{Training Variants}
 
-Table~\ref{tab:training_variants} summarizes the evaluated training variants. All variants share the same teacher, student backbone, embedding dimension, and main distillation objective, but differ in spatial KD, augmentation policy, and checkpoint stabilization.
+Table~\ref{tab:training_variants} summarizes the evaluated training variants. All variants share the same teacher, student backbone, embedding dimension, and main distillation objective, but differ in spatial KD gating, augmentation policy, and checkpoint stabilization.
 
 \begin{table*}[h]
 \centering
-\caption{Training variants evaluated in this work. Each variant is trained independently from scratch.}
+\caption{Training variants evaluated in this work. Each variant is trained independently from scratch. ``Gated'' spatial KD means spatial loss is active only during clean (non-masked) epochs.}
 \label{tab:training_variants}
 \begin{tabular}{lcccc}
 \hline
 \textbf{Variant} & \textbf{Spatial KD} & \textbf{Occlusion Policy} & \textbf{SWA} & \textbf{Purpose} \\
 \hline
 V1: Clean KD & No & Light masking & No & Clean-face recognition \\
-V2: Spatial-Occlusion KD & Yes & Aggressive masking/blur & No & Ablation study \\
-V3: Robust-SWA KD & Yes & Milder masking/blur & Yes & Occlusion robustness \\
+V2: Spatial-Occlusion KD & Yes (always) & Aggressive masking/blur & No & Ablation study \\
+V3: Robust-SWA KD & Yes (gated) & Milder masking/blur & Yes & Occlusion robustness \\
+V4: Gated-Spatial KD & Yes (gated) & Milder masking/blur & No & Spatial KD + masking interaction \\
 \hline
 \end{tabular}
 \end{table*}
@@ -60,21 +61,23 @@ Table~\ref{tab:aug_params} details the exact augmentation schedule for each vari
 
 \begin{table}[h]
 \centering
-\caption{Occlusion augmentation parameters per training variant. V2 uses aggressive blur; V3 uses milder blur. ``—'' = not used.}
+\caption{Occlusion augmentation parameters per training variant. V2 uses aggressive blur; V3 and V4 use milder blur. V4 is identical to V3 in augmentation but has no SWA and uses gated spatial KD (active only in clean epochs 0--9). ``—'' = not used.}
 \label{tab:aug_params}
 \resizebox{\columnwidth}{!}{%
-\begin{tabular}{llll}
+\begin{tabular}{lllll}
 \hline
-\textbf{Parameter} & \textbf{V1} & \textbf{V2} & \textbf{V3} \\
+\textbf{Parameter} & \textbf{V1} & \textbf{V2} & \textbf{V3} & \textbf{V4} \\
 \hline
-Clean epochs (no aug) & 20 & 10 & 10 \\
-Mask prob (ramp start$\to$end) & 0.10 (static) & 0.10$\to$0.30 & 0.10$\to$0.30 \\
-Mask ramp epochs & ep.~20--40 & ep.~10--25 & ep.~10--25 \\
-Gaussian blur prob & 0 & 0.25$\to$0.75 & 0.25$\to$0.75 \\
-Gaussian $\sigma$ & — & 1.0$\to$2.8 & 1.0$\to$1.5 \\
-Gaussian kernel size (odd) & — & 5--11 & 5--11 \\
-Motion blur prob & 0 & 0.10$\to$0.55 & 0.10$\to$0.55 \\
-Motion kernel size (odd) & — & 7--17 & 5--9 \\
+Clean epochs (no aug) & 20 & 10 & 10 & 10 \\
+Mask prob (ramp start$\to$end) & 0.10 (static) & 0.10$\to$0.30 & 0.10$\to$0.30 & 0.10$\to$0.30 \\
+Mask ramp epochs & ep.~20--40 & ep.~10--25 & ep.~10--25 & ep.~10--25 \\
+Gaussian blur prob & 0 & 0.25$\to$0.75 & 0.25$\to$0.75 & 0.25$\to$0.75 \\
+Gaussian $\sigma$ & — & 1.0$\to$2.8 & 1.0$\to$1.5 & 1.0$\to$1.5 \\
+Gaussian kernel size (odd) & — & 5--11 & 5--11 & 5--11 \\
+Motion blur prob & 0 & 0.10$\to$0.55 & 0.10$\to$0.55 & 0.10$\to$0.55 \\
+Motion kernel size (odd) & — & 7--17 & 5--9 & 5--9 \\
+SWA & No & No & Yes & No \\
+Spatial KD & Off & Always on & Gated & Gated \\
 \hline
 \end{tabular}
 }
@@ -88,7 +91,7 @@ For runtime evaluation, we report processed frames, mean FPS, number of detectio
 
 \subsection{Compared Checkpoints}
 
-We compare six checkpoints. All variants use the same concept of "latest" (final epoch) and "best" (epoch with highest mean TAR@$10^{-4}$ on validation bin protocols):
+We compare seven checkpoints. All variants use the same concept of "latest" (final epoch) and "best" (epoch with highest mean TAR@$10^{-4}$ on validation bin protocols):
 \begin{itemize}
     \item \textbf{V1/latest}: final-epoch clean KD checkpoint; recommended for clean-face deployment.
     \item \textbf{V1/best}: epoch with best mean bin-protocol TAR@$10^{-4}$ across LFW/CFP/AgeDB.
@@ -96,9 +99,10 @@ We compare six checkpoints. All variants use the same concept of "latest" (final
     \item \textbf{V3/best}: best-epoch robust variant before SWA averaging.
     \item \textbf{V3/latest}: final-epoch robust variant before SWA averaging.
     \item \textbf{V3/SWA}: SWA-averaged checkpoint; recommended for masked or occluded deployment.
+    \item \textbf{V4/best}: best-epoch gated-spatial-KD variant (epoch~23 of~40, $\hat{p}_{\text{mask}}\approx0.20$); SWA was attempted but failed due to MagFace norm inflation under the heavy-masking phase.
 \end{itemize}
 
-This comparison highlights the trade-off between clean verification accuracy and occlusion robustness. V1 is expected to perform best on clean benchmarks, while V3/SWA is expected to be more stable under lower-face occlusion. V2 is included as an ablation to analyze the effect of combining spatial KD with aggressive occlusion augmentation. The V1/latest and V3/SWA checkpoints are the recommended deployment models; the remaining rows are included for completeness.
+This comparison highlights the accuracy-robustness trade-off and the effect of spatial KD gating. V1 performs best on clean benchmarks; V3/SWA gives best occlusion robustness; V4/best offers an intermediate trade-off with the highest student LFW accuracy (99.58\%) from spatial-KD-enhanced clean-epoch training. The V1/latest and V3/SWA checkpoints are the primary deployment recommendations; V4/best and V2/latest are included for analysis.
 
 
 \begin{table*}[h]

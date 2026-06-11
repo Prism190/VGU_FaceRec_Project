@@ -2,7 +2,7 @@
 
 \subsection{Clean Image Verification}
 
-Table~\ref{tab:bin_results} reports the verification accuracy on LFW, CFP-FP, and AgeDB-30\cite{cplfw,cfp,agedb}. The teacher model achieves the highest overall accuracy, as expected from the larger MagFace iResNet-100 backbone\cite{magface}. Among the student variants, V1 performs best on the clean bin protocols. In particular, V1/best obtains the highest mean accuracy of 96.37\%, mainly due to stronger performance on CFP-FP and AgeDB-30. V3/best achieves the highest LFW accuracy among the students, but its lower CFP-FP and AgeDB-30 scores reduce its mean performance.
+Table~\ref{tab:bin_results} reports the verification accuracy on LFW, CFP-FP, and AgeDB-30\cite{cplfw,cfp,agedb}. The teacher model achieves the highest overall accuracy, as expected from the larger MagFace iResNet-100 backbone\cite{magface}. Among student variants, V1/best achieves the highest mean accuracy (96.37\%), driven by strong CFP-FP and AgeDB-30 scores. V4/best — the spatial-KD variant that applies spatial feature matching during clean epochs and masks during curriculum epochs — achieves the highest LFW accuracy among all students (99.58\%), but with lower CFP-FP and AgeDB-30 scores than V1.
 
 \begin{table}[h]
 \centering
@@ -20,12 +20,13 @@ V1/best & 99.20 & \textbf{94.14} & \textbf{95.77} & \textbf{96.37} \\
 V3/best & \textbf{99.43} & 92.79 & 95.15 & 95.79 \\
 V3/latest & 99.02 & 92.06 & 93.60 & 94.89 \\
 V3/SWA & 99.00 & 91.54 & 94.00 & 94.85 \\
+V4/best & \textbf{99.58} & 92.71 & 95.32 & 95.87 \\
 \hline
 \end{tabular}
 }
 \end{table}
 
-These results show that the clean KD variant is the most suitable checkpoint for standard clean-face verification. Although V3 is designed for robustness, its clean benchmark accuracy is lower than V1, especially on CFP-FP and AgeDB-30. This suggests a trade-off between clean verification accuracy and robustness-oriented training.
+These results confirm a clear accuracy-robustness trade-off. V1 is the strongest student for clean-face verification by mean accuracy. V4/best achieves the best LFW score (99.58\%) across all students, showing that spatial KD during clean training epochs improves frontal-face discriminability, but at a cost to CFP-FP (profile-pose) performance. V3 variants trade further clean accuracy for occlusion robustness.
 
 \subsection{IJB Template Verification}
 
@@ -41,18 +42,19 @@ Table~\ref{tab:ijb_results} reports template-based verification results on IJB-B
 \hline
 Teacher: MagFace iResNet-100 & 0.9922 & 93.14 & 0.9960 & 97.64 \\
 V1/latest & 0.9912 & \textbf{87.98} & 0.9937 & \textbf{90.65} \\
-V1/best & 0.9905 & 86.88 & 0.9929 & 89.50 \\
-V2/latest & \textbf{0.9935} & 84.52 & \textbf{0.9949} & 86.85 \\
+V1/best & \textbf{0.9938} & 86.88 & 0.9929 & 89.50 \\
+V2/latest & 0.9935 & 84.52 & 0.9949 & 86.85 \\
 V3/best & 0.9916 & 84.77 & 0.9929 & 87.64 \\
 V3/latest & 0.9917 & 84.78 & 0.9932 & 87.23 \\
 V3/SWA & 0.9919 & 85.27 & 0.9930 & 87.77 \\
+V4/best & 0.9933 & 84.35 & \textbf{0.9953} & 87.35 \\
 \hline
 \end{tabular}
 \end{table*}
 
-The teacher remains the strongest model on both IJB-B and IJB-C. Among the student models, V1/latest gives the best low-FAR performance, reaching 87.98\% TAR@$10^{-4}$ on IJB-B and 90.65\% on IJB-C. This confirms that V1 is the preferred student checkpoint for clean or controlled deployment.
+The teacher remains the strongest model on both IJB-B and IJB-C. Among the student models, V1/latest gives the best low-FAR performance (87.98\% TAR@$10^{-4}$ on IJB-B; 90.65\% on IJB-C), confirming V1 as the preferred checkpoint for clean or controlled deployment. V1/best achieves the highest student AUC on IJB-B (0.9938), slightly above V4/best (0.9933) and V2/latest (0.9935). V4/best reaches 84.35\% TAR@$10^{-4}$ on IJB-B — between V3/SWA (85.27\%) and V3/best (84.77\%) — despite having the best student LFW accuracy. On IJB-C, V4/best achieves the highest student AUC (0.9953) and 87.35\% TAR@$10^{-4}$, surpassing V2/latest (0.9949) and all V3 variants on AUC. The gap between V4/best's LFW advantage and its IJB-B TAR@$10^{-4}$ result reflects that spatial KD improves frontal-face discriminability but does not generalize as strongly to pose-diverse IJB-B probes; the stronger V4/best IJB-C AUC suggests better overall template calibration at moderate FAR thresholds.
 
-An interesting observation is that V2/latest obtains the highest AUC among the student variants but performs worse at TAR@$10^{-4}$. This indicates that AUC alone does not fully reflect strict low-FAR behavior. Since real access-control systems usually operate at low false-acceptance rates, TAR at strict FAR thresholds is more important for deployment.
+V2/latest obtains a high AUC (0.9935) but weaker TAR@$10^{-4}$ (84.52\%), illustrating that AUC alone does not fully reflect strict low-FAR behavior. Real access-control deployments operate at strict FAR thresholds where TAR metrics are more relevant.
 
 \subsection{Occlusion Robustness}
 
@@ -70,15 +72,16 @@ Table~\ref{tab:occlusion_results} reports the TAR@$10^{-3}$ drop under synthetic
 MagFace iResNet-100 & -0.041 & -0.520 & -0.541 & -0.724 & -0.236 \\
 MobileFaceNet (W600K) & -0.085 & -0.549 & -0.550 & -0.494 & -0.324 \\
 V1/latest & -0.037 & -0.369 & -0.462 & -0.222 & -0.248 \\
+V4/best & -0.036 & -0.338 & -0.344 & -0.329 & -0.225 \\
 V3/SWA & \textbf{-0.019} & \textbf{-0.298} & \textbf{-0.321} & \textbf{-0.148} & \textbf{-0.100} \\
 \hline
 \end{tabular}
 }
 \end{table}
 
-The key finding is that both student variants outperform MobileFaceNet (W600K) on all five occlusion benchmarks, despite MBF being trained on $7\times$ more identities. MBF suffers the largest TAR drops in this group: $-0.549$ on CFP-FP, $-0.550$ on AgeDB, and $-0.494$ on CPLFW. This is expected because MBF is trained exclusively on clean faces with no occlusion augmentation, leaving it brittle under lower-face masking. In contrast, both V1/latest ($-0.369$, $-0.462$, $-0.222$) and V3/SWA ($-0.298$, $-0.321$, $-0.148$) show substantially smaller degradation, with V3/SWA being the most robust across all protocols.
+All three student variants outperform MobileFaceNet (W600K) on most occlusion benchmarks, despite MBF being trained on $7\times$ more identities. MBF suffers the largest TAR drops: $-0.549$ on CFP-FP, $-0.550$ on AgeDB, and $-0.494$ on CPLFW — expected because MBF has no occlusion augmentation. V4/best (spatial KD, partial masking curriculum at epoch 23) is intermediate: it substantially outperforms V1/latest on LFW, CFP-FP, AgeDB, and CALFW, but shows worse CPLFW drop ($-0.329$ vs $-0.222$) — likely because spatial KD trades some pose-invariance for frontal-face discriminability. V3/SWA remains the most robust across all five protocols.
 
-V3/SWA reduces the absolute TAR drop relative to MBF by $45.7\%$ on CFP-FP, $41.6\%$ on AgeDB, $70.1\%$ on CPLFW, and $69.1\%$ on CALFW. These are the clearest advantages of the proposed occlusion-curriculum and SWA training over a strong clean-face baseline.
+V3/SWA reduces the absolute TAR drop relative to MBF by $45.7\%$ on CFP-FP, $41.6\%$ on AgeDB, $70.1\%$ on CPLFW, and $69.1\%$ on CALFW. V4/best achieves intermediate improvements of $38.4\%$, $37.3\%$, $33.5\%$, and $30.6\%$ respectively, consistent with partial masking-curriculum completion at the selected checkpoint (epoch~23 of 40, $\hat{p}_{\text{mask}}\approx0.20$).
 
 The teacher also suffers large degradation under lower-face masking, especially on CFP-FP, AgeDB, and CPLFW. This shows that neither model scale nor training data volume guarantees robustness to structured occlusion\cite{cplfw,cfp,agedb,izmailov2019averagingweightsleadswider}.
 
@@ -99,11 +102,12 @@ V1/best & Best bin-protocol mean accuracy & Clean image-pair verification \\
 V2/latest & Diagnostic spatial-KD ablation & Not recommended for deployment \\
 V3/latest & Robust variant before averaging & Reference checkpoint \\
 V3/SWA & Best occlusion robustness & Masked or partially occluded deployment \\
+V4/best & Best student LFW (99.58\%) and IJB-C AUC (0.9953); intermediate occlusion robustness & Frontal-face-heavy controlled environments \\
 \hline
 \end{tabular}
 \end{table*}
 
-Overall, the results reveal a clear trade-off. The clean KD variant achieves the best performance under clean verification protocols, while the SWA-stabilized robust variant provides the strongest resistance to lower-face occlusion. Therefore, the appropriate checkpoint should be selected based on the expected deployment environment rather than using a single model for all scenarios.
+Overall, the results reveal a spectrum of trade-offs rather than a single best model. V1/latest is the strongest student for clean IJB template verification at strict FAR; V1/best leads on frontal-face bin protocols by mean accuracy and IJB-B AUC; V4/best leads on LFW (99.58\%), IJB-C AUC (0.9953), and MFR2 Rank-1 (69.01\%); and V3/SWA provides the best resistance to lower-face occlusion. V4/best occupies an intermediate position — better than V1 on occlusion robustness (partial masking curriculum), and better than V3 on LFW and IJB-C AUC (spatial KD during clean epochs). This hierarchy confirms that the appropriate deployment checkpoint depends on whether the operational environment is predominantly clean-face, pose-diverse, or mask-occluded.
 
 \subsection{Computational Efficiency}
 
@@ -143,12 +147,13 @@ To contextualize the student's efficiency, we compare against MobileFaceNet trai
 Teacher: iResNet-100 & 65.2M & 93.14 & 97.64 \\
 MobileFaceNet (W600K) & $\sim$1M & 89.42 & 91.72 \\
 Student: V1/latest & 9.58M & 87.98 & 90.65 \\
+Student: V4/best & 9.58M & 84.35 & 87.35 \\
 Student: V3/SWA & 9.58M & 85.27 & 87.77 \\
 \hline
 \end{tabular}
 \end{table}
 
-MobileFaceNet (W600K) has 1M parameters and 7$\times$ more training identities, yet our 9.58M-parameter student is within 1.44\% on IJB-B (87.98 vs.~89.42) and within 1.07\% on IJB-C (90.65 vs.~91.72). Despite having 9$\times$ more parameters than MBF, the student compensates through knowledge distillation from a strong teacher, achieving competitive IJB performance with substantially fewer training identities. The key advantage of the student over MBF lies in occlusion robustness — a regime where MBF, trained only on clean faces, is significantly weaker (see RMFRD evaluation below).
+MobileFaceNet (W600K) has $\sim$1M parameters and $7\times$ more training identities, yet our 9.58M-parameter V1/latest student is within 1.44\% on IJB-B and within 1.07\% on IJB-C. V4/best (84.35\% IJB-B TAR@$10^{-4}$; 87.35\% IJB-C TAR@$10^{-4}$) trails V1/latest by 3.63\% on IJB-B but achieves the highest student IJB-C AUC (0.9953), consistent with spatial KD improving overall template calibration while not fully recovering the IJB-B low-FAR advantage. The key advantage of all student variants over MBF lies in occlusion robustness, where MBF is significantly weaker (see RMFRD and occlusion evaluations).
 
 \subsection{Real-World Masked Face Evaluation (RMFRD)}
 
@@ -165,9 +170,10 @@ To evaluate robustness on real masked faces beyond synthetic lower-face masking,
 \hline
 \textbf{Model} & \textbf{AUC} & \textbf{TAR@$10^{-3}$} & \textbf{Rank-1} \\
 \hline
-MobileFaceNet (W600K) & 85.55 & 26.43 & 36.56 \\
+MobileFaceNet (W600K) & \textbf{85.55} & \textbf{26.43} & \textbf{36.56} \\
 Student: V1/best & 82.66 & 15.06 & 22.01 \\
-Student: V3/SWA & \textbf{84.18} & \textbf{15.68} & \textbf{23.03} \\
+Student: V4/best & 82.07 & 8.02 & 20.67 \\
+Student: V3/SWA & 84.18 & 15.68 & 23.03 \\
 \hline
 \end{tabular}
 }
@@ -175,7 +181,7 @@ Student: V3/SWA & \textbf{84.18} & \textbf{15.68} & \textbf{23.03} \\
 
 The alignment step is critical for meaningful evaluation. Without alignment, all models use simple bilinear resize, which suppresses discriminative facial features: MBF achieves only 68.72\% AUC / 7.25\% Rank-1 on unaligned crops but reaches 85.55\% AUC / 36.56\% Rank-1 after RetinaFace alignment — an improvement of $+16.8\%$ AUC and $+29.3$ Rank-1 points. This confirms that the RMFRD raw images are not pre-aligned and that any meaningful comparison must use landmark-based preprocessing.
 
-Among the student models, V3/SWA (84.18\% AUC, 23.03\% Rank-1) outperforms V1/best (82.66\% AUC, 22.01\% Rank-1) on real masked probes, confirming that the occlusion curriculum and SWA stabilization generalize beyond synthetic lower-face masking to real-world masks. This RMFRD result directly complements the synthetic masking ablation (Table~\ref{tab:occlusion_results}): just as V3/SWA shows smaller TAR drop on synthetic occlusion, it also achieves higher AUC and Rank-1 on real masked faces.
+Among student models, V3/SWA (84.18\% AUC, 23.03\% Rank-1) outperforms both V1/best (82.66\%, 22.01\%) and V4/best (82.07\%, 20.67\%) on real masked probes. The ordering V3/SWA $>$ V1/best $\approx$ V4/best on RMFRD AUC is consistent with the synthetic masking ablation (Table~\ref{tab:occlusion_results}): the full occlusion curriculum and SWA stabilization confer real-world masked face robustness, while V4/best at epoch~23 (partial curriculum) matches but does not exceed V1/best. The low V4/best TAR@$10^{-3}$ (8.02\%) reflects the sensitivity of strict FAR metrics to the hard-negative distribution in a small dataset (9,725 negative pairs).
 
 MobileFaceNet (W600K), despite its smaller parameter count (1M vs.\ 9.58M), outperforms both student variants on this dataset (85.55\% AUC, 36.56\% Rank-1). We attribute this primarily to the significantly larger training set: MBF is trained on WebFace600K with $\sim$600K identities, while our student uses MS1M-RetinaFace with $\sim$85K identities (7$\times$ fewer). Additionally, the RMFRD dataset predominantly features Asian celebrities, who may be more represented in WebFace600K than in MS1M. This suggests that the student's IJB advantage does not fully translate to this particular domain, highlighting the importance of training data diversity for cross-domain robustness.
 
@@ -201,15 +207,16 @@ Note: With only 424 negative pairs in the verification split, the FAR resolution
 \hline
 MobileFaceNet (W600K) & 89.91 & 95.11 & \textbf{72.51} \\
 Student: V1/best      & 94.18 & 95.37 & 61.99 \\
+Student: V4/best      & 94.28 & 95.48 & 69.01 \\
 Student: V3/SWA       & \textbf{94.38} & \textbf{95.99} & 66.67 \\
 \hline
 \end{tabular}
 }
 \end{table}
 
-Both student models substantially outperform MobileFaceNet (W600K) on MFR2 verification AUC (V1/best: $+4.27\%$; V3/SWA: $+4.47\%$). V3/SWA also surpasses MBF on identification AUC ($+0.88\%$). The improvement on verification AUC confirms that the student's knowledge-distilled embeddings yield stronger pairwise discriminability on a mixed masked/unmasked face matching task, despite training on $7\times$ fewer identities.
+All three student variants substantially outperform MobileFaceNet (W600K) on MFR2 verification AUC (V1/best: $+4.27\%$; V4/best: $+4.37\%$; V3/SWA: $+4.47\%$). V4/best ranks second on identification AUC (95.48\%) and achieves the highest student Rank-1 (69.01\%), surpassing V3/SWA (66.67\%) and V1/best (61.99\%). This is consistent with V4's stronger frontal-face discriminability (LFW 99.58\%) translating to gallery-matching accuracy on clean celebrity images. V3/SWA leads on identification AUC ($+0.88\%$ over MBF), confirming broader embedding calibration.
 
-However, MBF retains a substantial lead on Rank-1 identification ($72.51\%$ vs.\ $66.67\%$ for V3/SWA). This mirrors the RMFRD pattern, where MBF also leads on Rank-1. We attribute MBF's Rank-1 advantage to its larger training set ($\sim\!600$K identities vs.\ $\sim\!85$K) and, potentially, to greater overlap with the post-2020 political celebrity identities featured in both MFR2 and RMFRD. The student's superior AUC suggests better relative embedding calibration, but fewer absolute successes at the top-1 threshold.
+MBF retains the highest Rank-1 identification ($72.51\%$), attributed to its larger training set ($\sim\!600$K identities vs.\ $\sim\!85$K) and likely greater overlap with the post-2020 celebrity identities in MFR2. The student variants' superior AUC suggests better relative pairwise discriminability despite fewer absolute top-1 successes.
 
 \subsection{Runtime Pipeline Results}
 

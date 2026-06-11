@@ -1,0 +1,21 @@
+[mfr2] 53 paired identities | gallery: 98 clean | probes: 171 masked
+[mfr2] pairs.txt: 424 same-identity / 424 different-identity
+[mfr2] Running verification (pairs.txt)...
+[mfr2] Building gallery (no-mask images)...
+[mfr2] Extracting masked probes...
+{
+  "model": "phase4/best",
+  "dataset": "MFR2",
+  "num_paired_identities": 53,
+  "num_gallery_images": 98,
+  "num_probe_images": 171,
+  "verification_auc": 0.942812166251335,
+  "verification_num_same_pairs": 424,
+  "verification_num_diff_pairs": 424,
+  "identification_auc": 0.9547553093259465,
+  "identification_rank1": 0.6900584795321637,
+  "verification_tar_far_1e-3": 0.4009433962264151,
+  "identification_tar_far_1e-3": 0.23976608187134502,
+  "verification_tar_far_1e-4": 0.4009433962264151,
+  "identification_tar_far_1e-4": 0.23976608187134502
+}

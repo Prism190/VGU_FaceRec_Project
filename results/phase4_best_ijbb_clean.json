@@ -1,0 +1,16 @@
+{
+  "protocol": "ijbb",
+  "num_faces": 227630,
+  "num_templates": 12115,
+  "num_pairs_total": 8010270,
+  "num_pairs_scored": 8010270,
+  "num_pairs_missing_t1": 0,
+  "num_pairs_missing_t2": 0,
+  "missing_face_images": 0,
+  "template_pooling": "magface_weighted",
+  "roc_auc": 0.9932909952653359,
+  "num_scores_non_finite": 0,
+  "tar_far_1e-3": 0.9249269717624148,
+  "tar_far_1e-4": 0.843524829600779,
+  "tar_far_1e-5": 0.6589094449853944
+}
