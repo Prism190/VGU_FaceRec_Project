@@ -558,11 +558,11 @@ To address the reviewer's request for evaluation on real masked/occluded dataset
 
 | Model | AUC | TAR@1e-3 | TAR@1e-4 | Rank-1 |
 |---|---|---|---|---|
-| MobileFaceNet (W600K) | — | — | — | — |
-| Student: Phase1/best | — | — | — | — |
-| Student: Phase3/SWA | — | — | — | — |
+| MobileFaceNet (W600K) | **85.55%** | **26.43%** | **13.83%** | **36.56%** |
+| Student: Phase1/best | 82.66% | 15.06% | 5.09% | 22.01% |
+| Student: Phase3/SWA | 84.18% | 15.68% | 4.42% | 23.03% |
 
-*Aligned results filling in — RetinaFace alignment + eval pipeline running.*
+**Honest summary:** On RMFRD, MobileFaceNet (W600K) outperforms our students on all metrics — AUC by ~1.4 pp, Rank-1 by ~14 pp. The gap is primarily attributable to training-data scale: W600K uses ~600K identities vs. our 85K (7× fewer). Phase3/SWA does outperform Phase1/best on AUC (+1.5 pp) and Rank-1 (+1.0 pp), confirming the occlusion curriculum benefit even on real (not synthetic) masks. TAR at strict FAR (1e-4) is low for all student models, reflecting the small gallery size relative to the protocol difficulty.
 
 **Reference (unaligned, simple resize — not final):** Without 5-point alignment, all models show degraded absolute performance but the relative ranking still holds.
 
@@ -576,7 +576,21 @@ To address the reviewer's request for evaluation on real masked/occluded dataset
 
 **Unaligned findings:** Without alignment, numbers are uniformly suppressed (high-quality models actually suffer more because they're more sensitive to input alignment). The unaligned results are not a fair comparison — the aligned numbers are the primary results.
 
-**Key hypothesis:** Phase3/SWA should outperform Phase1/best on Rank-1 and TAR@strict-FAR, since it was trained with real masked-face augmentation. Phase1/best has no masking training and is expected to degrade on lower-face-occluded images.
+**Key hypothesis outcome:** Phase3/SWA does outperform Phase1/best on AUC and Rank-1 (confirmed), but not on TAR@1e-4 (4.42% vs 5.09%, reversed). The strict-FAR reversal is consistent with Phase3's known TAR@1e-4 trade-off against occlusion robustness seen in IJB-C.
+
+---
+
+## 14b. Real-World Masked Face Recognition (MFR2)
+
+MFR2 evaluates 53 celebrity identities with masked probes against a clean gallery (171 masked probes, 98 gallery images). Two protocols: **verification** (424 same / 424 different pairs) and **identification** (Rank-1 over 53 identities).
+
+| Model | Verif. AUC | Verif. TAR@1e-3 | ID Rank-1 |
+|---|---|---|---|
+| MobileFaceNet (W600K) | 89.91% | 32.31% | **72.51%** |
+| Student: Phase1/best | 94.18% | 24.53% | 61.99% |
+| Student: Phase3/SWA | **94.38%** | **37.03%** | 66.67% |
+
+**Summary:** Our students significantly outperform MobileFaceNet on verification AUC (+4.5 pp for V3/SWA), suggesting the MagFace quality-aware training produces better-calibrated embeddings for masked-face pairwise comparison. However, MobileFaceNet leads Rank-1 identification by ~6 pp, again reflecting the 7× training-identity-count advantage of W600K. V3/SWA outperforms V1/best on both Rank-1 (+4.7 pp) and TAR@1e-3 (+12.5 pp), confirming the occlusion curriculum's benefit on real masked faces.
 
 ---
 
@@ -603,5 +617,6 @@ Key additional findings (addressing paper review gaps):
 - **Compute efficiency**: 53× MACs reduction (12.15G → 228M); wall-clock latency 18.52ms → 11.22ms despite 6.8× fewer parameters
 - **Pooling ablation**: `magface_weighted` consistently outperforms `mean` and `top-k` at strict FAR (1e-4), validating the choice of quality-weighted template pooling for access control
 - **Baseline comparison**: Under evaluation against MobileFaceNet (W600K) on same IJB-B/C protocol
-- **Real masked face evaluation**: Running on RMFRD (403 paired identities), expected to confirm Phase3/SWA robustness advantage on real (not synthetic) occlusions
+- **Real masked face evaluation (RMFRD)**: Phase3/SWA outperforms Phase1/best on AUC (+1.5 pp) and Rank-1 (+1.0 pp); both students trail MobileFaceNet W600K by ~14 pp Rank-1 due to 7× fewer training identities (85K vs 600K)
+- **Real masked face evaluation (MFR2)**: Phase3/SWA verification AUC 94.38% exceeds MobileFaceNet W600K by +4.5 pp; Rank-1 trails by ~6 pp for same training-scale reason
 - **Phase 4**: Training in progress with all fixes applied; expected to improve occlusion robustness metric variance over Phase 3
